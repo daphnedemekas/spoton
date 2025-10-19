@@ -82,8 +82,14 @@ export default function Discover() {
       if (eventsData) {
         // Filter out events the user has already interacted with
         const uninteractedEvents = eventsData.filter(event => !interactedEventIds.has(event.id));
+        // Filter by location - only show events in user's city or online events
+        const locationFiltered = uninteractedEvents.filter(event => {
+          const eventLocation = event.location.toLowerCase();
+          const userCityLower = profile?.city.toLowerCase() || '';
+          return eventLocation.includes(userCityLower) || eventLocation === 'online';
+        });
         // Shuffle events for random order
-        const shuffled = [...uninteractedEvents].sort(() => Math.random() - 0.5);
+        const shuffled = [...locationFiltered].sort(() => Math.random() - 0.5);
         setAllEvents(shuffled);
       }
     } catch (error) {
