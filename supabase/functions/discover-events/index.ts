@@ -89,7 +89,9 @@ CRITICAL INSTRUCTIONS:
    - Extract the ACTUAL event_link from the page
    - Extract the ACTUAL image_url from the event page (look for og:image, event poster, venue photo)
    - If you cannot find a real image URL on the event page, set image_url to null
-   - Extract all other event details (title, description, date, location, etc.)
+   - Extract all other event details (title, description, location, etc.)
+   - CRITICAL: The date field must be a SINGLE DATE in YYYY-MM-DD format, NOT a date range
+   - If an event spans multiple days, pick the first day only
 
 3. NEVER make up or generate fake URLs - only use actual URLs you find through web search
 4. Only return events that have valid event_link URLs
@@ -170,17 +172,28 @@ Return the events using the return_events function.`
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events - only require valid event links
+    // Filter and validate events
     const validEvents = eventsData.events
       .filter((event: any) => {
         const hasValidLink = event.event_link && 
           typeof event.event_link === 'string' && 
           event.event_link.startsWith('http');
         
+        // Validate date format (must be YYYY-MM-DD, not a range)
+        const hasValidDate = event.date && 
+          typeof event.date === 'string' && 
+          /^\d{4}-\d{2}-\d{2}$/.test(event.date);
+        
         if (!hasValidLink) {
           console.log(`Skipping event "${event.title}" - missing valid event link`);
           return false;
         }
+        
+        if (!hasValidDate) {
+          console.log(`Skipping event "${event.title}" - invalid date format: ${event.date}`);
+          return false;
+        }
+        
         return true;
       })
       .map((event: any) => {
