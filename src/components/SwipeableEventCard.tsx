@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin, ExternalLink } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -11,6 +11,7 @@ type Event = {
   title: string;
   description: string;
   date: string;
+  time?: string;
   location: string;
   vibes: string[];
   interests: string[];
@@ -110,6 +111,12 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                   <Calendar className="h-4 w-4" />
                   <span className="text-sm">{new Date(event.date).toLocaleDateString()}</span>
                 </div>
+                {event.time && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Clock className="h-4 w-4" />
+                    <span className="text-sm">{event.time}</span>
+                  </div>
+                )}
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="h-4 w-4" />
                   <span className="text-sm">{event.location}</span>

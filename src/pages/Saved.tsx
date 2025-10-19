@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles, Trash2, List, CalendarDays } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Trash2, List, CalendarDays, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isPast, parseISO, format, isSameDay } from "date-fns";
 import logoIcon from "@/assets/logo-icon.png";
@@ -17,6 +17,7 @@ interface Event {
   title: string;
   description: string;
   date: string;
+  time?: string;
   location: string;
   event_link: string | null;
   interests: string[];
@@ -287,6 +288,12 @@ const Saved = () => {
                           <Calendar className="h-4 w-4" />
                           {format(eventDate, "PPP")}
                         </div>
+                        {event.time && (
+                          <div className="flex items-center gap-2 mt-1">
+                            <Clock className="h-4 w-4" />
+                            {event.time}
+                          </div>
+                        )}
                         <div className="flex items-center gap-2 mt-1">
                           <MapPin className="h-4 w-4" />
                           {event.location}
@@ -403,6 +410,12 @@ const Saved = () => {
                               <CardHeader>
                                 <CardTitle>{event.title}</CardTitle>
                                 <CardDescription>
+                                  {event.time && (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Clock className="h-4 w-4" />
+                                      {event.time}
+                                    </div>
+                                  )}
                                   <div className="flex items-center gap-2 mt-1">
                                     <MapPin className="h-4 w-4" />
                                     {event.location}

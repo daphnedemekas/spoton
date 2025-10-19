@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, ExternalLink, ArrowLeft } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, ArrowLeft, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface Event {
@@ -12,6 +12,7 @@ interface Event {
   title: string;
   description: string;
   date: string;
+  time?: string;
   location: string;
   event_link: string | null;
   interests: string[];
@@ -110,6 +111,12 @@ const Attended = () => {
                   <Calendar className="h-4 w-4" />
                   {event.date}
                 </div>
+                {event.time && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Clock className="h-4 w-4" />
+                    {event.time}
+                  </div>
+                )}
                 <div className="flex items-center gap-2 mt-1">
                   <MapPin className="h-4 w-4" />
                   {event.location}

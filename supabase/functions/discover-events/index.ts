@@ -432,21 +432,22 @@ ${interactionContext}
 
 REQUIREMENTS:
 1. Extract SPECIFIC event page URLs from the HTML (not listing pages)
-2. Parse event titles, dates, descriptions, and locations from the HTML
-3. Identify if event is in-person or virtual/online - prefer in-person events
-4. **CRITICAL: ONLY include events that are EITHER in ${city} OR explicitly marked as "Online" or "Virtual". DO NOT include events from other cities.**
-5. Remove duplicate events (same URL or same title/venue/date)
-6. Only include events with specific dates in the next 7 days (starting from ${today})
-7. Format dates as YYYY-MM-DD
-8. Calculate relevance_score (0-100) for each event:
+2. Parse event titles, dates, descriptions, locations, and **times** from the HTML
+3. Extract the event time in a readable format like "7:00 PM" or "2:00 PM - 4:00 PM". If no specific time is found, use "All Day"
+4. Identify if event is in-person or virtual/online - prefer in-person events
+5. **CRITICAL: ONLY include events that are EITHER in ${city} OR explicitly marked as "Online" or "Virtual". DO NOT include events from other cities.**
+6. Remove duplicate events (same URL or same title/venue/date)
+7. Only include events with specific dates in the next 7 days (starting from ${today})
+8. Format dates as YYYY-MM-DD
+9. Calculate relevance_score (0-100) for each event:
    - Give high scores to in-person events in ${city} that match user interests
    - Give lower scores to virtual/online events
    - Consider interaction history to boost/downrank events
-9. Sort events by relevance_score (highest first)
-10. Extract detailed descriptions (at least 2-3 sentences)
-11. For in-person events: Include specific venue names and addresses in location field. The location MUST be in ${city}.
-12. For online/virtual events: Set location to exactly "Online"
-13. Ensure each URL is a direct link to a specific event page, not a listing page
+10. Sort events by relevance_score (highest first)
+11. Extract detailed descriptions (at least 2-3 sentences)
+12. For in-person events: Include specific venue names and addresses in location field. The location MUST be in ${city}.
+13. For online/virtual events: Set location to exactly "Online"
+14. Ensure each URL is a direct link to a specific event page, not a listing page
 
 CRITICAL DATE PARSING RULES:
 - Today's date is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})
@@ -478,13 +479,14 @@ Return events using the return_events function.`
                         title: { type: "string" },
                         description: { type: "string" },
                         date: { type: "string" },
+                        time: { type: "string", description: "Event time like '7:00 PM' or '2:00 PM - 4:00 PM' or 'All Day'" },
                         location: { type: "string" },
                         event_link: { type: "string" },
                         interests: { type: "array", items: { type: "string" } },
                         vibes: { type: "array", items: { type: "string" } },
                         relevance_score: { type: "number", description: "Score from 0-100 based on user preference match" }
                       },
-                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes", "relevance_score"],
+                      required: ["title", "description", "date", "time", "location", "event_link", "interests", "vibes", "relevance_score"],
                       additionalProperties: false
                     }
                   }

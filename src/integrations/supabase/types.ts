@@ -124,6 +124,7 @@ export type Database = {
           id: string
           interests: string[]
           location: string
+          time: string | null
           title: string
           vibes: string[]
         }
@@ -135,6 +136,7 @@ export type Database = {
           id?: string
           interests: string[]
           location: string
+          time?: string | null
           title: string
           vibes: string[]
         }
@@ -146,6 +148,7 @@ export type Database = {
           id?: string
           interests?: string[]
           location?: string
+          time?: string | null
           title?: string
           vibes?: string[]
         }
