@@ -203,8 +203,41 @@ export default function Discover() {
               <MapPin className="h-4 w-4" />
               <span className="text-sm">{userCity}</span>
             </div>
-            <h1 className="mb-6 text-4xl font-bold">Discover Events</h1>
-            <div className="flex gap-3">
+            <div className="flex items-center justify-between">
+              <h1 className="text-4xl font-bold">Discover Events</h1>
+              <Button
+                onClick={async () => {
+                  setLoading(true);
+                  try {
+                    const { data, error } = await supabase.functions.invoke('discover-events', {
+                      body: { userId: currentUserId }
+                    });
+                    
+                    if (error) throw error;
+                    
+                    toast({
+                      title: "Events discovered!",
+                      description: data.message,
+                    });
+                    
+                    await loadData();
+                  } catch (error: any) {
+                    toast({
+                      variant: "destructive",
+                      title: "Error",
+                      description: error.message,
+                    });
+                  } finally {
+                    setLoading(false);
+                  }
+                }}
+                className="gap-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                Discover New Events
+              </Button>
+            </div>
+            <div className="mt-6 flex gap-3">
               <Button
                 variant={timeFilter === "today" ? "default" : "outline"}
                 onClick={() => setTimeFilter("today")}
