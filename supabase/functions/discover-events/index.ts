@@ -114,34 +114,6 @@ serve(async (req) => {
       }
     }
     
-    // Scrape Meetup
-    for (const interest of interestsList.slice(0, 2)) {
-      const meetupUrl = `https://www.meetup.com/find/?location=${encodeURIComponent(city)}&keywords=${encodeURIComponent(interest)}`;
-      console.log('Scraping Meetup:', meetupUrl);
-      
-      try {
-        const response = await fetch(meetupUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          allScrapedData.push({
-            source: 'meetup',
-            interest,
-            url: meetupUrl,
-            content: html.substring(0, 50000)
-          });
-          console.log(`Scraped Meetup for ${interest}`);
-        }
-      } catch (error) {
-        console.log(`Failed to scrape Meetup for ${interest}:`, error);
-      }
-    }
-    
     // Scrape Ticketmaster
     for (const interest of interestsList.slice(0, 2)) {
       const ticketmasterUrl = `https://www.ticketmaster.com/search?q=${encodeURIComponent(interest + ' ' + city)}`;
@@ -221,7 +193,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction and ranking assistant. Parse HTML from event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
+            content: `You are an event extraction and ranking assistant. Parse HTML from event platforms (Eventbrite, Ticketmaster, Eventful) and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
 
 SCORING CRITERIA (total 100 points):
 - Interest Match (25 points): How many user interests align with the event
@@ -251,7 +223,7 @@ User preferences:
 ${interactionContext}
 
 REQUIREMENTS:
-1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, meetup.com/group-name/events/123456, ticketmaster.com/event/ABC123, eventful.com/events/E0-001-123456)
+1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, ticketmaster.com/event/ABC123, eventful.com/events/E0-001-123456)
 2. Parse event titles, dates, descriptions, and locations from the HTML
 3. Identify if event is in-person or virtual/online - prefer in-person events
 4. Check if event location is in ${city} - prioritize local events
