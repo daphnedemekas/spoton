@@ -94,21 +94,27 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery expert. Given user interests and a city, suggest the best event websites to scrape.`
+            content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences.`
           },
           {
             role: 'user',
             content: `City: ${city}
 Interests: ${interestsList.join(', ')}
 
-Suggest 10-15 specific event listing URLs to scrape for these interests in ${city}. Include:
-- Eventbrite category pages
-- Ticketmaster search pages
-- Local event calendars
-- Venue websites
-- Festival/event aggregators
+Suggest up to 50 specific URLs to scrape for these interests in ${city}. Think broadly - not just event platforms, but ANY website that would have relevant activities or opportunities:
 
-Return actual scrapable URLs, not just domain names.`
+EXAMPLES of what to include:
+- Event platforms (Eventbrite, local event calendars)
+- Venue websites (music venues, theaters, galleries, comedy clubs)
+- Activity-specific sites (yoga studios, meditation centers, climbing gyms, makerspaces)
+- Outdoor recreation (AllTrails, park websites, hiking groups)
+- Community centers and libraries
+- Meetup alternatives and local groups
+- Festival and market calendars
+- Sports leagues and recreational programs
+- Workshop and class providers
+
+Return actual scrapable URLs that would list current/upcoming activities, not just homepages. Be specific and creative based on the user's interests.`
           }
         ],
         tools: [
