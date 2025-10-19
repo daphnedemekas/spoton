@@ -38,14 +38,13 @@ export default function Index() {
           </div>
           
           <h1 className="mb-6 text-5xl font-bold leading-tight md:text-7xl">
-            Find Your{" "}
             <span className="bg-gradient-primary bg-clip-text text-transparent">
-              Perfect Vibe
+              SpotOn
             </span>
           </h1>
           
           <p className="mb-8 text-xl text-muted-foreground md:text-2xl">
-            Discover events that match your interests and energy in your city
+            Discover events that match your interests and energy
           </p>
 
           <Button
