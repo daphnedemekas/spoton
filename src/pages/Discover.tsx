@@ -42,6 +42,12 @@ export default function Discover() {
   const [scrapedSites, setScrapedSites] = useState<any[]>([]);
   const [showScrapingPanel, setShowScrapingPanel] = useState(false);
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
+  const [loadingMessages, setLoadingMessages] = useState<string[]>([
+    "Finding your perfect events...",
+    "Discovering amazing experiences...",
+    "Curating events just for you...",
+  ]);
+  const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   
   const currentIndexRef = useRef(currentIndex);
 
@@ -52,7 +58,18 @@ export default function Discover() {
   useEffect(() => {
     loadData();
     loadPendingConnections();
+    loadEngagingMessages();
   }, []);
+
+  useEffect(() => {
+    if (loading && loadingMessages.length > 0) {
+      const interval = setInterval(() => {
+        setCurrentMessageIndex((prev) => (prev + 1) % loadingMessages.length);
+      }, 2000); // Change message every 2 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [loading, loadingMessages]);
 
   const loadPendingConnections = async () => {
     try {
@@ -68,6 +85,19 @@ export default function Discover() {
       setPendingConnectionsCount(pendingConnections?.length || 0);
     } catch (error) {
       console.error("Error loading pending connections:", error);
+    }
+  };
+
+  const loadEngagingMessages = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke('loading-messages');
+      
+      if (!error && data?.messages) {
+        setLoadingMessages(data.messages);
+      }
+    } catch (error) {
+      console.error("Error loading messages:", error);
+      // Keep default messages on error
     }
   };
 
@@ -441,7 +471,9 @@ export default function Discover() {
                     <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
                       <Sparkles className="h-10 w-10 text-muted-foreground animate-pulse" />
                     </div>
-                    <h2 className="mb-2 text-2xl font-semibold">Discovering more events...</h2>
+                    <h2 className="mb-2 text-2xl font-semibold transition-all duration-500">
+                      {loadingMessages[currentMessageIndex]}
+                    </h2>
                     <p className="text-muted-foreground">
                       Finding new experiences for you
                     </p>
