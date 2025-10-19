@@ -98,7 +98,7 @@ serve(async (req) => {
 
         try {
           const braveResponse = await fetch(
-            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=20`,
             {
               method: 'GET',
               headers: {
@@ -111,7 +111,7 @@ serve(async (req) => {
 
           if (braveResponse.ok) {
             const braveData = await braveResponse.json();
-            const results = braveData.web?.results?.slice(0, 5).map((result: any) => ({
+            const results = braveData.web?.results?.slice(0, 10).map((result: any) => ({
               title: result.title,
               description: result.description,
               url: result.url,
@@ -164,7 +164,7 @@ URL: ${r.url}
 Context: ${r.searchContext.interest} / ${r.searchContext.vibe}
 ${r.description}`).join('\n\n')}
 
-Extract 8-12 unique upcoming events happening between ${today} and ${nextWeek}.
+Extract 15-20 unique upcoming events happening between ${today} and ${nextWeek}.
 
 User preferences:
 - Interests: ${userInterests}
@@ -180,6 +180,9 @@ REQUIREMENTS:
 6. Verify each URL is an actual event page (not just a venue homepage)
 7. If a result doesn't have enough info to be a complete event, skip it
 8. Prioritize events from Eventbrite, Meetup, Facebook Events, Ticketmaster, and official venue sites
+9. Extract detailed descriptions (at least 2-3 sentences when available)
+10. Include specific venue names and addresses in location field
+11. Match multiple interests/vibes per event when relevant
 
 Return events using the return_events function.`
           }
