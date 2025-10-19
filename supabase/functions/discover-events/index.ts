@@ -12,12 +12,29 @@ serve(async (req) => {
   }
 
   try {
-    const { userId } = await req.json();
-    
+    // Extract user ID from JWT token
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      throw new Error('Missing authorization header');
+    }
+
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      {
+        global: {
+          headers: { Authorization: authHeader },
+        },
+      }
     );
+
+    // Get authenticated user
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      throw new Error('Unauthorized');
+    }
+    
+    const userId = user.id;
 
     // Get user profile and preferences
     const { data: profile } = await supabaseClient
@@ -281,14 +298,15 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     
     console.log(`Selected ${allWebsites.length} random websites from ${allAvailableWebsites.length} available`);
 
-    // Step 2: Scrape the suggested websites
+    // Step 2: Scrape websites in parallel with concurrency limit
+    console.log(`Scraping ${allWebsites.length} websites with parallel processing...`);
     const allScrapedData: any[] = [];
     const scrapingStatus: any[] = [];
     
-    // Scrape websites - ensure we include major event platforms
-    console.log('Scraping suggested websites...');
+    // Parallel scraping helper with concurrency limit
+    const CONCURRENCY_LIMIT = 5;
     
-    for (const website of allWebsites) {
+    const scrapeWebsite = async (website: any) => {
       console.log(`Scraping: ${website.url}`);
       
       try {
@@ -312,7 +330,15 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
         }
       } catch (error) {
         console.log(`Failed to scrape ${website.url}:`, error);
+        scrapingStatus.push({ url: website.url, source: website.source, interest: website.interest, status: 'failed' });
       }
+    };
+    
+    // Process in batches with concurrency limit
+    for (let i = 0; i < allWebsites.length; i += CONCURRENCY_LIMIT) {
+      const batch = allWebsites.slice(i, i + CONCURRENCY_LIMIT);
+      console.log(`Processing batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}/${Math.ceil(allWebsites.length / CONCURRENCY_LIMIT)}`);
+      await Promise.all(batch.map(website => scrapeWebsite(website)));
     }
 
     console.log(`Total pages scraped: ${allScrapedData.length}`);
@@ -623,21 +649,43 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       );
     }
 
-    // Clear all old events first
-    const { error: deleteError } = await supabaseClient
+    // Smart event updates: only insert new events, keep existing ones
+    console.log('Fetching existing events for smart updates...');
+    const { data: existingEvents } = await supabaseClient
       .from('events')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+      .select('title, date, location, event_link');
 
-    if (deleteError) {
-      console.error('Error deleting old events:', deleteError);
-      // Continue anyway - we still want to insert new events
-    } else {
-      console.log('Successfully cleared old events');
+    // Create a Set of existing event signatures for fast lookup
+    const existingSignatures = new Set(
+      (existingEvents || []).map(e => 
+        `${e.title.toLowerCase().trim()}|${e.date}|${e.location.toLowerCase().trim()}`
+      )
+    );
+
+    // Filter out events that already exist
+    const newEvents = validEvents.filter((event: any) => {
+      const signature = `${event.title.toLowerCase().trim()}|${event.date}|${event.location.toLowerCase().trim()}`;
+      return !existingSignatures.has(signature);
+    });
+
+    console.log(`Found ${newEvents.length} new events out of ${validEvents.length} total (${existingEvents?.length || 0} already exist)`);
+
+    if (newEvents.length === 0) {
+      console.log('No new events to insert');
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          eventsCount: 0,
+          existingCount: existingEvents?.length || 0,
+          message: 'All discovered events already exist in database',
+          scrapingStatus: scrapingStatus
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
-    // Insert new events into database
-    const eventsToInsert = validEvents.map((event: any) => ({
+    // Insert only new events
+    const eventsToInsert = newEvents.map((event: any) => ({
       title: event.title,
       description: event.description,
       date: event.date,
@@ -657,13 +705,15 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       throw insertError;
     }
 
-    console.log('Successfully inserted', insertedEvents?.length, 'events');
+    console.log('Successfully inserted', insertedEvents?.length, 'new events');
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         eventsCount: insertedEvents?.length || 0,
-        message: `Discovered ${insertedEvents?.length || 0} events in ${city}`,
+        existingCount: existingEvents?.length || 0,
+        totalEvents: (existingEvents?.length || 0) + (insertedEvents?.length || 0),
+        message: `Added ${insertedEvents?.length || 0} new events in ${city}`,
         scrapingStatus: scrapingStatus
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

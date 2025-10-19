@@ -258,7 +258,7 @@ export default function Discover() {
                   setScrapedSites([]);
                   try {
                     const { data, error } = await supabase.functions.invoke('discover-events', {
-                      body: { userId: currentUserId }
+                      body: {} // Auth is handled via JWT in Authorization header
                     });
                     
                     if (error) throw error;
@@ -267,9 +267,15 @@ export default function Discover() {
                       setScrapedSites(data.scrapingStatus);
                     }
                     
+                    const message = data.eventsCount > 0 
+                      ? `Added ${data.eventsCount} new events! (${data.totalEvents} total in database)`
+                      : data.existingCount > 0 
+                        ? `No new events found - all ${data.existingCount} discovered events already exist`
+                        : data.message;
+                    
                     toast({
-                      title: "Events discovered!",
-                      description: data.message,
+                      title: data.eventsCount > 0 ? "New events discovered!" : "Discovery complete",
+                      description: message,
                     });
                     
                     await loadData();
