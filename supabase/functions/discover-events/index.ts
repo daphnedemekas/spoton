@@ -74,33 +74,23 @@ serve(async (req) => {
             role: 'user',
             content: `Find 5-10 real upcoming events in ${city} between ${today} and ${nextWeek} that match these interests: ${userInterests} and vibes: ${userVibes}. 
             
-Search the web for actual events from sources like Eventbrite, local event calendars, venue websites, etc.
+CRITICAL REQUIREMENTS:
+- Search the web for actual events from sources like Eventbrite, Meetup, local event calendars, venue websites, Facebook Events, etc.
+- EVERY event MUST have a valid, working URL (event_link) to the actual event page
+- EVERY event MUST have a valid image URL (image_url) - visit the event page to get the actual event image
+- DO NOT include any events without both a valid event_link AND image_url
 
 For each event, extract:
 - title (string)
 - description (string, 1-2 sentences)
 - date (YYYY-MM-DD format)
 - location (specific venue name and address)
-- event_link (URL to the event page)
-- image_url (URL to event image if available, otherwise null)
+- event_link (REQUIRED - URL to the actual event page, must be a valid working URL)
+- image_url (REQUIRED - URL to event image from the event page, must be a valid image URL)
 - interests (array of relevant interests from: ${userInterests})
 - vibes (array of relevant vibes from: ${userVibes})
 
-Return ONLY this exact JSON format with no additional text:
-{
-  "events": [
-    {
-      "title": "Event Name",
-      "description": "Brief description",
-      "date": "2025-10-20",
-      "location": "Venue Name, Address",
-      "event_link": "https://...",
-      "image_url": "https://..." or null,
-      "interests": ["Interest1", "Interest2"],
-      "vibes": ["Vibe1", "Vibe2"]
-    }
-  ]
-}`
+Return ONLY valid events that have both event_link AND image_url populated with real URLs.`
           }
         ],
         tools: [
@@ -122,11 +112,11 @@ Return ONLY this exact JSON format with no additional text:
                         date: { type: "string" },
                         location: { type: "string" },
                         event_link: { type: "string" },
-                        image_url: { type: "string", nullable: true },
+                        image_url: { type: "string" },
                         interests: { type: "array", items: { type: "string" } },
                         vibes: { type: "array", items: { type: "string" } }
                       },
-                      required: ["title", "description", "date", "location", "interests", "vibes"],
+                      required: ["title", "description", "date", "location", "event_link", "image_url", "interests", "vibes"],
                       additionalProperties: false
                     }
                   }
@@ -175,14 +165,34 @@ Return ONLY this exact JSON format with no additional text:
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
+    // Filter and validate events - only insert events with valid links and images
+    const validEvents = eventsData.events.filter((event: any) => {
+      const hasValidLink = event.event_link && 
+        typeof event.event_link === 'string' && 
+        event.event_link.startsWith('http');
+      const hasValidImage = event.image_url && 
+        typeof event.image_url === 'string' && 
+        event.image_url.startsWith('http');
+      
+      if (!hasValidLink || !hasValidImage) {
+        console.log(`Skipping event "${event.title}" - missing valid link or image`);
+        return false;
+      }
+      return true;
+    });
+
+    if (validEvents.length === 0) {
+      throw new Error('No valid events found with required URLs');
+    }
+
     // Insert events into database
-    const eventsToInsert = eventsData.events.map((event: any) => ({
+    const eventsToInsert = validEvents.map((event: any) => ({
       title: event.title,
       description: event.description,
       date: event.date,
       location: event.location,
-      event_link: event.event_link || null,
-      image_url: event.image_url || null,
+      event_link: event.event_link,
+      image_url: event.image_url,
       interests: event.interests,
       vibes: event.vibes,
     }));
