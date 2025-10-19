@@ -93,7 +93,7 @@ serve(async (req) => {
     // Search for each interest + vibe combination
     for (const interest of interestsList) {
       for (const vibe of vibesList) {
-        const searchQuery = `${interest} ${vibe} events in ${city} ${today}`;
+        const searchQuery = `${interest} ${vibe} events in ${city} ${today} to ${nextWeek}`;
         console.log('Brave search:', searchQuery);
 
         try {
