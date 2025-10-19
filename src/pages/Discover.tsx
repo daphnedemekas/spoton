@@ -100,12 +100,16 @@ export default function Discover() {
 
   const handleSaveEvent = async (event: Event) => {
     try {
-      const { error } = await supabase.from("event_attendance").upsert({
+      // First delete any existing record to ensure clean state
+      await supabase.from("event_attendance").delete()
+        .eq("user_id", currentUserId)
+        .eq("event_id", event.id);
+
+      // Then insert fresh 'saved' record
+      const { error } = await supabase.from("event_attendance").insert({
         user_id: currentUserId,
         event_id: event.id,
         status: "saved",
-      }, {
-        onConflict: 'user_id,event_id'
       });
 
       if (error) throw error;
