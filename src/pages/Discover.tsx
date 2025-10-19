@@ -347,14 +347,14 @@ export default function Discover() {
                     <div className="mb-4 space-y-2">
                       <div className="flex flex-wrap gap-2">
                         {event.vibes.map((v) => (
-                          <Badge key={v} variant="secondary" className="text-xs bg-gradient-to-r from-primary/10 to-accent/10 border-primary/20">
+                          <Badge key={v} variant="secondary" className="text-xs bg-gradient-to-r from-accent/15 to-coral/15 border-accent/30 text-secondary-foreground">
                             {v}
                           </Badge>
                         ))}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {event.interests.map((i) => (
-                          <Badge key={i} variant="outline" className="text-xs border-accent/30 text-accent">
+                          <Badge key={i} variant="outline" className="text-xs border-coral/40 text-coral bg-coral/5">
                             {i}
                           </Badge>
                         ))}
