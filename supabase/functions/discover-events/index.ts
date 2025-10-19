@@ -528,13 +528,23 @@ User interests: ${userInterests}
 User vibes: ${userVibes}
 ${interactionContext}
 
-Requirements:
-- ONLY events in ${city} OR online/virtual
-- Specific event page URLs (not listing pages)
-- Dates as YYYY-MM-DD
-- Include event time
-- Detailed descriptions
-- Format: Today is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})`
+CRITICAL REQUIREMENTS:
+1. **ONLY** events in ${city} OR explicitly online/virtual events
+2. Extract SPECIFIC event page URLs (not listing pages like /events/ or /calendar/)
+3. Parse event **times** from the HTML in a readable format:
+   - Examples: "7:00 PM", "2:00 PM - 4:00 PM", "6:30 PM - 9:00 PM"
+   - If you see "7pm" or "19:00" convert to "7:00 PM"
+   - If no specific time is found, use "All Day"
+   - Look for time information in event titles, descriptions, and structured data
+4. Format dates as YYYY-MM-DD (Today is ${today} which is ${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})
+5. Extract detailed descriptions (2-3 sentences minimum)
+6. Include specific venue names and addresses for in-person events
+7. Remove duplicate events with same URL or same title/venue/date
+
+IMPORTANT DATE PARSING:
+- If you see "Mon Dec 15" or "December 15" without a year, assume ${currentYear}
+- Only extract events within 7 days from ${today}
+- Double-check all dates are in YYYY-MM-DD format`
         }
       ],
       tools: [
