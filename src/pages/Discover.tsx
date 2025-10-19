@@ -77,13 +77,14 @@ export default function Discover() {
 
       const { data: eventsData } = await supabase
         .from("events")
-        .select("*")
-        .order("date", { ascending: true });
+        .select("*");
 
       if (eventsData) {
         // Filter out events the user has already interacted with
         const uninteractedEvents = eventsData.filter(event => !interactedEventIds.has(event.id));
-        setAllEvents(uninteractedEvents);
+        // Shuffle events for random order
+        const shuffled = [...uninteractedEvents].sort(() => Math.random() - 0.5);
+        setAllEvents(shuffled);
       }
     } catch (error) {
       console.error("Error loading data:", error);
