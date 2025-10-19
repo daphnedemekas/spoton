@@ -109,8 +109,12 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    const today = new Date().toISOString().split('T')[0];
-    const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1; // 0-indexed
+    const currentDay = now.getDate();
 
     // Step 1: Check for cached website suggestions
     const interestsList = shuffledInterests; // Use shuffled interests
@@ -432,6 +436,16 @@ REQUIREMENTS:
 10. Extract detailed descriptions (at least 2-3 sentences)
 11. Include specific venue names and addresses in location field
 12. Ensure each URL is a direct link to a specific event page, not a listing page
+
+CRITICAL DATE PARSING RULES:
+- Today's date is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})
+- Current year is ${currentYear}
+- When you see dates like "Dec 15" or "December 15", they mean ${currentYear}-12-15
+- When you see dates like "Jan 10", they mean ${currentYear + 1}-01-10 (next year if we're past January)
+- If an event shows "Mon, Dec 15" or similar without a year, assume ${currentYear} if the date hasn't passed yet
+- Always double-check that parsed dates fall between ${today} and ${nextWeek}
+- Do NOT extract events that are more than 7 days away
+- If a date seems unclear, skip that event rather than guessing
 
 Return events using the return_events function.`
           }
