@@ -68,8 +68,13 @@ serve(async (req) => {
     console.log('User interests:', userInterests);
     console.log('User vibes:', userVibes);
 
-    // Use Lovable AI with web search to find real events
+    // Get API keys
+    const BRAVE_API_KEY = Deno.env.get('BRAVE_SEARCH_API_KEY');
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    
+    if (!BRAVE_API_KEY) {
+      throw new Error('BRAVE_SEARCH_API_KEY not configured');
+    }
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
@@ -77,6 +82,48 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
+    // Build search query
+    const searchQuery = `events in ${city} ${userInterests.split(',').slice(0, 3).join(' ')} ${today}`;
+    console.log('Brave search query:', searchQuery);
+
+    // Step 1: Search the web with Brave
+    const braveResponse = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=20`, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'Accept-Encoding': 'gzip',
+        'X-Subscription-Token': BRAVE_API_KEY,
+      },
+    });
+
+    if (!braveResponse.ok) {
+      const errorText = await braveResponse.text();
+      console.error('Brave Search API error:', braveResponse.status, errorText);
+      throw new Error('Failed to search for events with Brave');
+    }
+
+    const braveData = await braveResponse.json();
+    console.log('Brave search returned', braveData.web?.results?.length || 0, 'results');
+
+    // Extract search results
+    const searchResults = braveData.web?.results?.slice(0, 15).map((result: any) => ({
+      title: result.title,
+      description: result.description,
+      url: result.url,
+    })) || [];
+
+    if (searchResults.length === 0) {
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'No events found in web search. Try different interests or location.',
+          eventsCount: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
+    }
+
+    // Step 2: Use Gemini to process and extract structured events
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -88,45 +135,33 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with VALID, WORKING URLs. Return events in the specified JSON format using the return_events function.`
+            content: `You are an event extraction assistant. Analyze web search results and extract REAL events with accurate information. Only include events that have clear dates, locations, and valid event page URLs.`
           },
           {
             role: 'user',
-            content: `Find 8-10 upcoming events in ${city} happening between ${today} and ${nextWeek}.
+            content: `Here are web search results for events in ${city}:
 
-Search for events matching these interests: ${userInterests}
-And these vibes: ${userVibes}
+${searchResults.map((r: any, i: number) => `[${i + 1}] ${r.title}
+URL: ${r.url}
+${r.description}`).join('\n\n')}
+
+Extract 8-10 upcoming events happening between ${today} and ${nextWeek}.
+
+User preferences:
+- Interests: ${userInterests}
+- Vibes: ${userVibes}
 ${interactionContext}
 
-CRITICAL URL REQUIREMENTS - READ CAREFULLY:
-1. For EACH event, provide a REAL, SPECIFIC event page URL using these exact formats:
-   
-   EVENTBRITE: https://www.eventbrite.com/e/[specific-event-name]-tickets-[actual-number-id]
-   Example: https://www.eventbrite.com/e/tech-meetup-ai-showcase-tickets-123456789
-   
-   MEETUP: https://www.meetup.com/[group-slug]/events/[actual-event-id]/
-   Example: https://www.meetup.com/sf-tech-community/events/298765432/
-   
-   FACEBOOK: https://www.facebook.com/events/[actual-event-id]
-   Example: https://www.facebook.com/events/987654321012345
-   
-   VENUE SITES: https://[venue-domain]/events/[specific-event-page]
-   Example: https://www.sfmoma.org/events/friday-nights-march-2025/
+REQUIREMENTS:
+1. Use the ACTUAL URLs from the search results above
+2. Only include events with specific dates between ${today} and ${nextWeek}
+3. Format dates as YYYY-MM-DD
+4. Match events to user interests and vibes
+5. Verify each URL is an actual event page (not just a venue homepage)
+6. If a result doesn't have enough info to be a complete event, skip it
+7. Prioritize events from Eventbrite, Meetup, Facebook Events, and venue sites
 
-2. CRITICAL: Each URL must have a REAL event ID or specific event slug
-   - NEVER use generic paths like /events/ or /calendar/
-   - NEVER use placeholder IDs like 123 or xxx
-   - Each URL must point to ONE specific event page
-
-3. If you cannot construct a properly formatted URL with real-looking IDs, DO NOT include that event
-
-4. Prioritize Eventbrite and Meetup - they have the most consistent URL structures
-
-5. Use interaction history to personalize:
-   - Find MORE events similar to saved ones
-   - AVOID events similar to removed ones
-
-Return events using the return_events function with valid URLs.`
+Return events using the return_events function.`
           }
         ],
         tools: [
