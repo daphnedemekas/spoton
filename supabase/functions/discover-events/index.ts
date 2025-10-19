@@ -525,8 +525,36 @@ Return events using the return_events function.`
       }
     };
 
-    // Filter and validate events with URL verification
+    // Advanced duplicate detection and validation
     const validatedEvents = [];
+    const seenUrls = new Set<string>();
+    const seenSignatures = new Set<string>();
+    
+    // Helper to normalize URLs for comparison
+    const normalizeUrl = (url: string): string => {
+      try {
+        const urlObj = new URL(url);
+        // Remove trailing slashes, query params, fragments
+        return urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
+      } catch {
+        return url.toLowerCase().replace(/\/$/, '');
+      }
+    };
+    
+    // Helper to create fuzzy signature (ignore punctuation, normalize whitespace)
+    const createFuzzySignature = (event: any): string => {
+      const title = event.title.toLowerCase()
+        .replace(/[^\w\s]/g, '') // Remove punctuation
+        .replace(/\s+/g, ' ')     // Normalize whitespace
+        .trim();
+      const location = event.location.toLowerCase()
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 50); // First 50 chars of location
+      return `${title}|${event.date}|${location}`;
+    };
+    
     for (const event of eventsData.events) {
       // Validate URL format
       const hasValidLink = event.event_link && 
@@ -550,6 +578,20 @@ Return events using the return_events function.`
         continue;
       }
 
+      // Check for URL duplicates (normalized)
+      const normalizedUrl = normalizeUrl(event.event_link);
+      if (seenUrls.has(normalizedUrl)) {
+        console.log(`Skipping duplicate URL: ${event.title} - ${event.event_link}`);
+        continue;
+      }
+      
+      // Check for fuzzy duplicate events (same title/date/location with slight variations)
+      const fuzzySignature = createFuzzySignature(event);
+      if (seenSignatures.has(fuzzySignature)) {
+        console.log(`Skipping fuzzy duplicate: ${event.title}`);
+        continue;
+      }
+
       // Verify URL actually works
       const isWorking = await verifyUrl(event.event_link);
       if (!isWorking) {
@@ -557,6 +599,8 @@ Return events using the return_events function.`
         continue;
       }
 
+      seenUrls.add(normalizedUrl);
+      seenSignatures.add(fuzzySignature);
       validatedEvents.push(event);
     }
 
@@ -674,32 +718,69 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       .eq('user_id', userId)
       .eq('interaction_type', 'removed');
 
-    // Create a Set of existing event signatures for fast lookup
+    // Create comprehensive deduplication sets
+    const existingUrls = new Set(
+      (existingEvents || [])
+        .filter(e => e.event_link)
+        .map(e => {
+          try {
+            const urlObj = new URL(e.event_link);
+            return urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
+          } catch {
+            return e.event_link.toLowerCase().replace(/\/$/, '');
+          }
+        })
+    );
+    
     const existingSignatures = new Set(
-      (existingEvents || []).map(e => 
-        `${e.title.toLowerCase().trim()}|${e.date}|${e.location.toLowerCase().trim()}`
-      )
+      (existingEvents || []).map(e => {
+        const title = e.title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+        const location = e.location.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().substring(0, 50);
+        return `${title}|${e.date}|${location}`;
+      })
     );
 
-    // Create a Set of removed event titles (case-insensitive)
+    // Create a Set of removed event titles (case-insensitive, fuzzy)
     const removedTitles = new Set(
-      (removedInteractions || []).map(r => r.event_title.toLowerCase().trim())
+      (removedInteractions || []).map(r => 
+        r.event_title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
+      )
     );
 
     // Filter out events that already exist OR were previously removed
     const newEvents = validEvents.filter((event: any) => {
-      const signature = `${event.title.toLowerCase().trim()}|${event.date}|${event.location.toLowerCase().trim()}`;
-      const titleLower = event.title.toLowerCase().trim();
+      // Normalize URL for comparison
+      let normalizedEventUrl = '';
+      try {
+        const urlObj = new URL(event.event_link);
+        normalizedEventUrl = urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
+      } catch {
+        normalizedEventUrl = event.event_link.toLowerCase().replace(/\/$/, '');
+      }
       
-      // Skip if already exists or was removed
-      if (existingSignatures.has(signature)) {
-        console.log(`Skipping duplicate: ${event.title}`);
+      // Create fuzzy signature
+      const title = event.title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
+      const location = event.location.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().substring(0, 50);
+      const signature = `${title}|${event.date}|${location}`;
+      
+      // Skip if URL already exists
+      if (existingUrls.has(normalizedEventUrl)) {
+        console.log(`Skipping duplicate URL: ${event.title}`);
         return false;
       }
-      if (removedTitles.has(titleLower)) {
+      
+      // Skip if event signature already exists
+      if (existingSignatures.has(signature)) {
+        console.log(`Skipping duplicate event: ${event.title}`);
+        return false;
+      }
+      
+      // Skip if was removed
+      if (removedTitles.has(title)) {
         console.log(`Skipping removed event: ${event.title}`);
         return false;
       }
+      
       return true;
     });
 
