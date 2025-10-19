@@ -44,7 +44,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
         <Card className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-xl">
           <div className="h-full flex flex-col">
             {event.image_url && (
-              <div className="relative h-32 w-full overflow-hidden bg-muted flex-shrink-0">
+              <div className="relative h-24 w-full overflow-hidden bg-muted flex-shrink-0">
                 <img
                   src={event.image_url}
                   alt={event.title}
@@ -57,14 +57,14 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
             )}
             
             <div className="flex-1 overflow-y-auto p-4 pb-20">
-              <div className="mb-3">
-                <h2 className="mb-1 text-xl font-bold">{event.title}</h2>
-                <p className="text-sm text-muted-foreground line-clamp-2">
+              <div className="mb-2">
+                <h2 className="mb-1 text-lg font-bold">{event.title}</h2>
+                <p className="text-sm text-muted-foreground line-clamp-3">
                   {event.description}
                 </p>
               </div>
 
-              <div className="mb-3 space-y-1 text-sm">
+              <div className="mb-2 space-y-0.5 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="h-3 w-3" />
                   <span className="text-xs">{new Date(event.date).toLocaleDateString()}</span>
@@ -75,7 +75,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 </div>
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="flex flex-wrap gap-1">
                   {event.vibes.slice(0, 3).map((v) => (
                     <Badge key={v} variant="secondary" className="text-xs py-0">
