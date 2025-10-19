@@ -79,7 +79,7 @@ serve(async (req) => {
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     // Step 1: Ask Gemini for best websites to scrape based on interests
-    const interestsList = interests.slice(0, 4).map(i => i.interest);
+    const interestsList = interests.map(i => i.interest); // All interests
     
     console.log('Asking Gemini for website suggestions...');
     
