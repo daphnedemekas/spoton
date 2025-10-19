@@ -190,9 +190,19 @@ export default function Discover() {
 
   const handleRemoveEvent = async (event: Event) => {
     try {
+      // Delete any existing record first to ensure clean state
       await supabase.from("event_attendance").delete()
         .eq("user_id", currentUserId)
         .eq("event_id", event.id);
+
+      // Insert a "dismissed" record so it doesn't show again
+      const { error } = await supabase.from("event_attendance").insert({
+        user_id: currentUserId,
+        event_id: event.id,
+        status: "dismissed",
+      });
+
+      if (error) throw error;
 
       await supabase.from("event_interactions").insert({
         user_id: currentUserId,
