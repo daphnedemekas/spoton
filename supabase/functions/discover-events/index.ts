@@ -87,10 +87,9 @@ IMPORTANT INSTRUCTIONS:
 
 2. For EACH event you must provide:
    - A valid event_link (URL to the actual event page)
-   - A valid image_url (event poster or venue image)
    - All other required fields
 
-3. If you can't find valid URLs for an event, DO NOT include it
+3. If you can't find a valid event link, DO NOT include it
 
 Return the events using the return_events function with all required fields populated.`
           }
@@ -114,11 +113,10 @@ Return the events using the return_events function with all required fields popu
                         date: { type: "string" },
                         location: { type: "string" },
                         event_link: { type: "string" },
-                        image_url: { type: "string" },
                         interests: { type: "array", items: { type: "string" } },
                         vibes: { type: "array", items: { type: "string" } }
                       },
-                      required: ["title", "description", "date", "location", "event_link", "image_url", "interests", "vibes"],
+                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes"],
                       additionalProperties: false
                     }
                   }
@@ -167,17 +165,22 @@ Return the events using the return_events function with all required fields popu
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events - only insert events with valid links and images
+    // Filter and validate events - only insert events with valid links
     const validEvents = eventsData.events.filter((event: any) => {
       const hasValidLink = event.event_link && 
         typeof event.event_link === 'string' && 
         event.event_link.startsWith('http');
-      const hasValidImage = event.image_url && 
-        typeof event.image_url === 'string' && 
-        event.image_url.startsWith('http');
       
-      if (!hasValidLink || !hasValidImage) {
-        console.log(`Skipping event "${event.title}" - missing valid link or image`);
+      const hasValidDate = event.date && 
+        typeof event.date === 'string' && 
+        /^\d{4}-\d{2}-\d{2}$/.test(event.date);
+      
+      if (!hasValidLink) {
+        console.log(`Skipping event "${event.title}" - missing valid link`);
+        return false;
+      }
+      if (!hasValidDate) {
+        console.log(`Skipping event "${event.title}" - invalid date format`);
         return false;
       }
       return true;
@@ -187,7 +190,7 @@ Return the events using the return_events function with all required fields popu
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'No valid events found. The AI could not find events with valid URLs and images. Please try again or adjust your preferences.',
+          error: 'No valid events found. The AI could not find events with valid URLs. Please try again or adjust your preferences.',
           eventsCount: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -214,7 +217,6 @@ Return the events using the return_events function with all required fields popu
       date: event.date,
       location: event.location,
       event_link: event.event_link,
-      image_url: event.image_url,
       interests: event.interests,
       vibes: event.vibes,
     }));

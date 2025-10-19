@@ -95,7 +95,6 @@ export type Database = {
           description: string
           event_link: string | null
           id: string
-          image_url: string | null
           interests: string[]
           location: string
           title: string
@@ -107,7 +106,6 @@ export type Database = {
           description: string
           event_link?: string | null
           id?: string
-          image_url?: string | null
           interests: string[]
           location: string
           title: string
@@ -119,7 +117,6 @@ export type Database = {
           description?: string
           event_link?: string | null
           id?: string
-          image_url?: string | null
           interests?: string[]
           location?: string
           title?: string
