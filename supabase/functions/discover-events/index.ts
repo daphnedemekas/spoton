@@ -68,29 +68,31 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery assistant. Search the web for real upcoming events happening in the specified city. Find events that match the user's interests and vibes. Return ONLY valid JSON with an array of events.`
+            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with valid URLs and images. Return events in the specified JSON format using the return_events function.`
           },
           {
             role: 'user',
-            content: `Find 5-10 real upcoming events in ${city} between ${today} and ${nextWeek} that match these interests: ${userInterests} and vibes: ${userVibes}. 
-            
-CRITICAL REQUIREMENTS:
-- Search the web for actual events from sources like Eventbrite, Meetup, local event calendars, venue websites, Facebook Events, etc.
-- EVERY event MUST have a valid, working URL (event_link) to the actual event page
-- EVERY event MUST have a valid image URL (image_url) - visit the event page to get the actual event image
-- DO NOT include any events without both a valid event_link AND image_url
+            content: `Find 8-10 upcoming events in ${city} happening between ${today} and ${nextWeek}.
 
-For each event, extract:
-- title (string)
-- description (string, 1-2 sentences)
-- date (YYYY-MM-DD format)
-- location (specific venue name and address)
-- event_link (REQUIRED - URL to the actual event page, must be a valid working URL)
-- image_url (REQUIRED - URL to event image from the event page, must be a valid image URL)
-- interests (array of relevant interests from: ${userInterests})
-- vibes (array of relevant vibes from: ${userVibes})
+Search for events matching these interests: ${userInterests}
+And these vibes: ${userVibes}
 
-Return ONLY valid events that have both event_link AND image_url populated with real URLs.`
+IMPORTANT INSTRUCTIONS:
+1. Search the web for REAL events from platforms like:
+   - Eventbrite
+   - Meetup.com
+   - Facebook Events
+   - Local venue websites
+   - City event calendars
+
+2. For EACH event you must provide:
+   - A valid event_link (URL to the actual event page)
+   - A valid image_url (event poster or venue image)
+   - All other required fields
+
+3. If you can't find valid URLs for an event, DO NOT include it
+
+Return the events using the return_events function with all required fields populated.`
           }
         ],
         tools: [
@@ -182,7 +184,14 @@ Return ONLY valid events that have both event_link AND image_url populated with 
     });
 
     if (validEvents.length === 0) {
-      throw new Error('No valid events found with required URLs');
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: 'No valid events found. The AI could not find events with valid URLs and images. Please try again or adjust your preferences.',
+          eventsCount: 0
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      );
     }
 
     // Clear all old events first
