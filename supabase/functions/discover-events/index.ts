@@ -68,36 +68,31 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery assistant with web search capabilities. Your job is to find REAL upcoming events by searching the web and extracting actual event details including REAL image URLs from the event pages you find. You must use your web search to find events and extract their actual data.`
+            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with valid URLs and images. Return events in the specified JSON format using the return_events function.`
           },
           {
             role: 'user',
-            content: `Search the web and find 8-10 REAL upcoming events in ${city} happening between ${today} and ${nextWeek}.
+            content: `Find 8-10 upcoming events in ${city} happening between ${today} and ${nextWeek}.
 
-Target events matching these interests: ${userInterests}
-Target events matching these vibes: ${userVibes}
+Search for events matching these interests: ${userInterests}
+And these vibes: ${userVibes}
 
-CRITICAL INSTRUCTIONS:
-1. USE WEB SEARCH to find real events from:
-   - Eventbrite.com events
-   - Meetup.com events  
+IMPORTANT INSTRUCTIONS:
+1. Search the web for REAL events from platforms like:
+   - Eventbrite
+   - Meetup.com
    - Facebook Events
-   - Local venue websites (concert halls, theaters, etc.)
+   - Local venue websites
    - City event calendars
 
-2. For EACH event you find:
-   - Extract the ACTUAL event_link from the page
-   - Extract the ACTUAL image_url from the event page (look for og:image, event poster, venue photo)
-   - If you cannot find a real image URL on the event page, set image_url to null
-   - Extract all other event details (title, description, location, etc.)
-   - CRITICAL: The date field must be a SINGLE DATE in YYYY-MM-DD format, NOT a date range
-   - If an event spans multiple days, pick the first day only
+2. For EACH event you must provide:
+   - A valid event_link (URL to the actual event page)
+   - A valid image_url (event poster or venue image)
+   - All other required fields
 
-3. NEVER make up or generate fake URLs - only use actual URLs you find through web search
-4. Only return events that have valid event_link URLs
-5. Prefer events with real image URLs, but include events without images if they're good matches
+3. If you can't find valid URLs for an event, DO NOT include it
 
-Return the events using the return_events function.`
+Return the events using the return_events function with all required fields populated.`
           }
         ],
         tools: [
@@ -119,11 +114,11 @@ Return the events using the return_events function.`
                         date: { type: "string" },
                         location: { type: "string" },
                         event_link: { type: "string" },
-                        image_url: { type: "string", nullable: true },
+                        image_url: { type: "string" },
                         interests: { type: "array", items: { type: "string" } },
                         vibes: { type: "array", items: { type: "string" } }
                       },
-                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes"],
+                      required: ["title", "description", "date", "location", "event_link", "image_url", "interests", "vibes"],
                       additionalProperties: false
                     }
                   }
@@ -172,41 +167,21 @@ Return the events using the return_events function.`
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events
-    const validEvents = eventsData.events
-      .filter((event: any) => {
-        const hasValidLink = event.event_link && 
-          typeof event.event_link === 'string' && 
-          event.event_link.startsWith('http');
-        
-        // Validate date format (must be YYYY-MM-DD, not a range)
-        const hasValidDate = event.date && 
-          typeof event.date === 'string' && 
-          /^\d{4}-\d{2}-\d{2}$/.test(event.date);
-        
-        if (!hasValidLink) {
-          console.log(`Skipping event "${event.title}" - missing valid event link`);
-          return false;
-        }
-        
-        if (!hasValidDate) {
-          console.log(`Skipping event "${event.title}" - invalid date format: ${event.date}`);
-          return false;
-        }
-        
-        return true;
-      })
-      .map((event: any) => {
-        // Set image_url to null if it's not a valid URL
-        const hasValidImage = event.image_url && 
-          typeof event.image_url === 'string' && 
-          event.image_url.startsWith('http');
-        
-        return {
-          ...event,
-          image_url: hasValidImage ? event.image_url : null
-        };
-      });
+    // Filter and validate events - only insert events with valid links and images
+    const validEvents = eventsData.events.filter((event: any) => {
+      const hasValidLink = event.event_link && 
+        typeof event.event_link === 'string' && 
+        event.event_link.startsWith('http');
+      const hasValidImage = event.image_url && 
+        typeof event.image_url === 'string' && 
+        event.image_url.startsWith('http');
+      
+      if (!hasValidLink || !hasValidImage) {
+        console.log(`Skipping event "${event.title}" - missing valid link or image`);
+        return false;
+      }
+      return true;
+    });
 
     if (validEvents.length === 0) {
       return new Response(
@@ -219,31 +194,17 @@ Return the events using the return_events function.`
       );
     }
 
-    // Clear all old events (past events and current batch)
-    const todayDate = new Date();
-    todayDate.setHours(0, 0, 0, 0);
-    
+    // Clear all old events first
     const { error: deleteError } = await supabaseClient
       .from('events')
       .delete()
-      .lt('date', todayDate.toISOString().split('T')[0]); // Delete past events
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
 
     if (deleteError) {
-      console.error('Error deleting past events:', deleteError);
+      console.error('Error deleting old events:', deleteError);
+      // Continue anyway - we still want to insert new events
     } else {
-      console.log('Successfully cleared past events');
-    }
-
-    // Also clear all remaining events to replace with new batch
-    const { error: clearError } = await supabaseClient
-      .from('events')
-      .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
-
-    if (clearError) {
-      console.error('Error clearing events:', clearError);
-    } else {
-      console.log('Successfully cleared all events for new batch');
+      console.log('Successfully cleared old events');
     }
 
     // Insert new events into database

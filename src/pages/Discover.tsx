@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
-import { Settings, Calendar, MapPin, Sparkles, User, Check, Search, MapPinned } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, Check, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Event = {
@@ -21,7 +21,7 @@ type Event = {
   event_link?: string;
 };
 
-type AttendanceStatus = "suggested" | "saved" | "attended" | null;
+type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
 
 export default function Discover() {
   const navigate = useNavigate();
@@ -90,12 +90,12 @@ export default function Discover() {
     navigate("/auth");
   };
 
-  const handleSaveEvent = async (eventId: string) => {
+  const handleAttendanceUpdate = async (eventId: string, newStatus: "will_attend" | "attended") => {
     try {
       const currentStatus = attendanceMap[eventId];
 
-      if (currentStatus === "saved") {
-        // Remove save if already saved
+      if (currentStatus === newStatus) {
+        // Remove attendance if clicking the same status
         await supabase
           .from("event_attendance")
           .delete()
@@ -103,21 +103,21 @@ export default function Discover() {
           .eq("event_id", eventId);
 
         setAttendanceMap((prev) => ({ ...prev, [eventId]: null }));
-        toast({ title: "Removed from saved" });
+        toast({ title: "Status removed" });
       } else {
-        // Save event
+        // Update or insert attendance
         const { error } = await supabase
           .from("event_attendance")
           .upsert({
             user_id: currentUserId,
             event_id: eventId,
-            status: "saved",
+            status: newStatus,
           });
 
         if (error) throw error;
 
-        setAttendanceMap((prev) => ({ ...prev, [eventId]: "saved" }));
-        toast({ title: "Event saved!" });
+        setAttendanceMap((prev) => ({ ...prev, [eventId]: newStatus }));
+        toast({ title: `Marked as ${newStatus === "will_attend" ? "Will Attend" : "Attended"}` });
       }
     } catch (error: any) {
       toast({
@@ -158,21 +158,13 @@ export default function Discover() {
           <div className="container mx-auto flex items-center justify-between px-4 py-4">
             <div className="flex items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <MapPinned className="h-5 w-5 text-primary-foreground" />
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 SpotOn
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/saved")}
-                className="hover:bg-secondary"
-              >
-                <Calendar className="h-5 w-5" />
-              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -279,8 +271,8 @@ export default function Discover() {
                   }}
                 >
                   <div className="p-6">
-                    <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
-                      {event.image_url ? (
+                    {event.image_url && (
+                      <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-muted">
                         <img
                           src={event.image_url}
                           alt={event.title}
@@ -289,12 +281,8 @@ export default function Discover() {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center">
-                          <Sparkles className="h-12 w-12 text-primary/40" />
-                        </div>
-                      )}
-                    </div>
+                      </div>
+                    )}
                     <div className="mb-4">
                       <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
                         {event.title}
@@ -330,16 +318,25 @@ export default function Discover() {
                       </div>
                     </div>
 
-                    {/* Save Button */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    {/* Attendance Buttons */}
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
-                        variant={status === "saved" ? "default" : "outline"}
+                        variant={status === "will_attend" ? "default" : "outline"}
                         size="sm"
-                        className="w-full"
-                        onClick={() => handleSaveEvent(event.id)}
+                        className="flex-1"
+                        onClick={() => handleAttendanceUpdate(event.id, "will_attend")}
                       >
-                        {status === "saved" && <Check className="mr-1 h-4 w-4" />}
-                        {status === "saved" ? "Saved" : "Save"}
+                        {status === "will_attend" && <Check className="mr-1 h-4 w-4" />}
+                        Will Attend
+                      </Button>
+                      <Button
+                        variant={status === "attended" ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleAttendanceUpdate(event.id, "attended")}
+                      >
+                        {status === "attended" && <Check className="mr-1 h-4 w-4" />}
+                        Attended
                       </Button>
                     </div>
                   </div>
