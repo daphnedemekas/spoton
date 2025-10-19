@@ -193,16 +193,34 @@ Return the events using the return_events function with all required fields popu
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events - strict URL validation
-    const validEvents = eventsData.events.filter((event: any) => {
+    // Helper function to verify URL accessibility
+    const verifyUrl = async (url: string): Promise<boolean> => {
+      try {
+        const response = await fetch(url, {
+          method: 'HEAD',
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          redirect: 'follow',
+          signal: AbortSignal.timeout(5000)
+        });
+        return response.ok;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.log(`URL verification failed for ${url}: ${errorMessage}`);
+        return false;
+      }
+    };
+
+    // Filter and validate events with URL verification
+    const validatedEvents = [];
+    for (const event of eventsData.events) {
       // Validate URL format
       const hasValidLink = event.event_link && 
         typeof event.event_link === 'string' && 
         (event.event_link.startsWith('http://') || event.event_link.startsWith('https://')) &&
-        event.event_link.length > 10 && // Must be longer than just "https://"
-        !event.event_link.includes('example.com') && // No placeholder domains
+        event.event_link.length > 10 &&
+        !event.event_link.includes('example.com') &&
         !event.event_link.includes('placeholder') &&
-        event.event_link.includes('.'); // Must have a TLD
+        event.event_link.includes('.');
       
       const hasValidDate = event.date && 
         typeof event.date === 'string' && 
@@ -210,14 +228,112 @@ Return the events using the return_events function with all required fields popu
       
       if (!hasValidLink) {
         console.log(`Skipping event "${event.title}" - invalid or placeholder link: ${event.event_link}`);
-        return false;
+        continue;
       }
       if (!hasValidDate) {
         console.log(`Skipping event "${event.title}" - invalid date format: ${event.date}`);
-        return false;
+        continue;
       }
-      return true;
-    });
+
+      // Verify URL actually works
+      const isWorking = await verifyUrl(event.event_link);
+      if (!isWorking) {
+        console.log(`Skipping event "${event.title}" - URL not accessible: ${event.event_link}`);
+        continue;
+      }
+
+      validatedEvents.push(event);
+    }
+
+    console.log(`${validatedEvents.length} events passed validation and URL verification`);
+
+    // If less than 5 valid events, retry once
+    let finalEvents = validatedEvents;
+    if (finalEvents.length < 5) {
+      console.log('Too few valid events, retrying with stricter instructions...');
+      
+      const retryResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an event discovery assistant. CRITICAL: Only return events with VERIFIED, ACCESSIBLE, SPECIFIC event page URLs. DO NOT use general venue URLs ending in /events/ or /whats-on/.`
+            },
+            {
+              role: 'user',
+              content: `Find ${10 - finalEvents.length} upcoming events in ${city} between ${today} and ${nextWeek} with SPECIFIC event page URLs (not general /events/ pages).
+
+Interests: ${userInterests}
+Vibes: ${userVibes}
+
+Each URL must link to a SPECIFIC event page with details, dates, and registration.`
+            }
+          ],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "return_events",
+                description: "Return discovered events",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    events: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          title: { type: "string" },
+                          description: { type: "string" },
+                          date: { type: "string" },
+                          location: { type: "string" },
+                          vibes: { type: "array", items: { type: "string" } },
+                          interests: { type: "array", items: { type: "string" } },
+                          event_link: { type: "string" }
+                        },
+                        required: ["title", "description", "date", "location", "vibes", "interests", "event_link"]
+                      }
+                    }
+                  },
+                  required: ["events"]
+                }
+              }
+            }
+          ],
+          tool_choice: { type: "function", function: { name: "return_events" } }
+        }),
+      });
+
+      if (retryResponse.ok) {
+        const retryData = await retryResponse.json();
+        const retryToolCall = retryData.choices[0]?.message?.tool_calls?.[0];
+        
+        if (retryToolCall?.function?.name === 'return_events') {
+          const retryEventsData = JSON.parse(retryToolCall.function.arguments);
+          
+          for (const event of retryEventsData.events) {
+            const url = event.event_link?.trim();
+            if (!url || !url.startsWith('http')) continue;
+            
+            const isWorking = await verifyUrl(url);
+            if (isWorking) {
+              finalEvents.push(event);
+              console.log(`Retry success: "${event.title}" with working URL`);
+            }
+          }
+        }
+      }
+      
+      console.log(`After retry: ${finalEvents.length} total valid events`);
+    }
+
+    const validEvents = finalEvents;
 
     if (validEvents.length === 0) {
       return new Response(
