@@ -141,6 +141,60 @@ serve(async (req) => {
         console.log(`Failed to scrape Meetup for ${interest}:`, error);
       }
     }
+    
+    // Scrape Ticketmaster
+    for (const interest of interestsList.slice(0, 2)) {
+      const ticketmasterUrl = `https://www.ticketmaster.com/search?q=${encodeURIComponent(interest + ' ' + city)}`;
+      console.log('Scraping Ticketmaster:', ticketmasterUrl);
+      
+      try {
+        const response = await fetch(ticketmasterUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: 'ticketmaster',
+            interest,
+            url: ticketmasterUrl,
+            content: html.substring(0, 50000)
+          });
+          console.log(`Scraped Ticketmaster for ${interest}`);
+        }
+      } catch (error) {
+        console.log(`Failed to scrape Ticketmaster for ${interest}:`, error);
+      }
+    }
+
+    // Scrape Eventful
+    const eventfulUrl = `https://eventful.com/events?l=${encodeURIComponent(city)}`;
+    console.log('Scraping Eventful:', eventfulUrl);
+    
+    try {
+      const response = await fetch(eventfulUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      
+      if (response.ok) {
+        const html = await response.text();
+        allScrapedData.push({
+          source: 'eventful',
+          interest: 'general',
+          url: eventfulUrl,
+          content: html.substring(0, 50000)
+        });
+        console.log('Scraped Eventful');
+      }
+    } catch (error) {
+      console.log('Failed to scrape Eventful:', error);
+    }
 
     console.log(`Total pages scraped: ${allScrapedData.length}`);
 
@@ -167,7 +221,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction assistant. Parse HTML from event platforms (Eventbrite, Meetup) and extract REAL upcoming events with EXACT event page URLs. Only return events with complete information.`
+            content: `You are an event extraction assistant. Parse HTML from event platforms (Eventbrite, Meetup, Ticketmaster, Eventful) and extract REAL upcoming events with EXACT event page URLs. Only return events with complete information.`
           },
           {
             role: 'user',
@@ -187,7 +241,7 @@ User preferences:
 ${interactionContext}
 
 REQUIREMENTS:
-1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, meetup.com/group-name/events/123456)
+1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, meetup.com/group-name/events/123456, ticketmaster.com/event/ABC123, eventful.com/events/E0-001-123456)
 2. Parse event titles, dates, descriptions, and locations from the HTML
 3. Remove duplicate events (same URL or same title/venue/date)
 4. Only include events with specific dates between ${today} and ${nextWeek}
