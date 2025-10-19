@@ -47,6 +47,7 @@ export default function Index() {
 
         if (error) throw error;
         toast.success("Welcome back!");
+        await checkAuth();
       } else {
         const { error } = await supabase.auth.signUp({
           email,
