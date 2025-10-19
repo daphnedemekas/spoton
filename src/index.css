@@ -8,7 +8,7 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 220 25% 98%;
+    --background: 340 15% 98%;
     --foreground: 220 15% 15%;
 
     --card: 0 0% 100%;
@@ -45,9 +45,9 @@ All colors MUST be HSL.
 
     --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(340 85% 65%));
+    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(262 83% 58%));
     --gradient-accent: linear-gradient(135deg, hsl(340 85% 65%), hsl(12 85% 65%));
-    --gradient-subtle: linear-gradient(180deg, hsl(220 25% 98%), hsl(340 25% 98%));
+    --gradient-subtle: linear-gradient(180deg, hsl(340 10% 98%), hsl(12 20% 97%));
     --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(340 15% 99%));
     
     --shadow-glow: 0 10px 40px -10px hsl(262 83% 58% / 0.25);
@@ -100,9 +100,9 @@ All colors MUST be HSL.
     --input: 220 15% 20%;
     --ring: 270 100% 68%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(270 100% 68%), hsl(340 85% 65%));
+    --gradient-primary: linear-gradient(135deg, hsl(270 100% 68%), hsl(270 100% 68%));
     --gradient-accent: linear-gradient(135deg, hsl(340 85% 65%), hsl(12 85% 65%));
-    --gradient-subtle: linear-gradient(180deg, hsl(220 25% 8%), hsl(340 15% 12%));
+    --gradient-subtle: linear-gradient(180deg, hsl(340 10% 10%), hsl(12 15% 12%));
     --gradient-card: linear-gradient(135deg, hsl(220 20% 12%), hsl(340 10% 14%));
     
     --shadow-glow: 0 10px 40px -10px hsl(270 100% 68% / 0.3);
