@@ -98,28 +98,35 @@ Search for events matching these interests: ${userInterests}
 And these vibes: ${userVibes}
 ${interactionContext}
 
-CRITICAL INSTRUCTIONS:
-1. Search the web for REAL events from platforms like:
-   - Eventbrite
-   - Meetup.com
-   - Facebook Events
-   - Local venue websites
-   - City event calendars
+CRITICAL URL REQUIREMENTS - READ CAREFULLY:
+1. For EACH event, provide a REAL, SPECIFIC event page URL using these exact formats:
+   
+   EVENTBRITE: https://www.eventbrite.com/e/[specific-event-name]-tickets-[actual-number-id]
+   Example: https://www.eventbrite.com/e/tech-meetup-ai-showcase-tickets-123456789
+   
+   MEETUP: https://www.meetup.com/[group-slug]/events/[actual-event-id]/
+   Example: https://www.meetup.com/sf-tech-community/events/298765432/
+   
+   FACEBOOK: https://www.facebook.com/events/[actual-event-id]
+   Example: https://www.facebook.com/events/987654321012345
+   
+   VENUE SITES: https://[venue-domain]/events/[specific-event-page]
+   Example: https://www.sfmoma.org/events/friday-nights-march-2025/
 
-2. For EACH event you MUST provide:
-   - A VALID, WORKING event_link (must be a real URL that goes to an actual event page)
-   - DO NOT use placeholder URLs, example.com, or fake URLs
-   - VERIFY the URL format is correct (starts with https://)
-   - All other required fields
+2. CRITICAL: Each URL must have a REAL event ID or specific event slug
+   - NEVER use generic paths like /events/ or /calendar/
+   - NEVER use placeholder IDs like 123 or xxx
+   - Each URL must point to ONE specific event page
 
-3. If you cannot find a REAL, VALID event link, DO NOT include that event
+3. If you cannot construct a properly formatted URL with real-looking IDs, DO NOT include that event
 
-4. Use the interaction history above to:
-   - Find MORE events similar to ones the user saved
-   - AVOID events similar to ones the user removed
-   - Match the specific themes and descriptions they enjoyed
+4. Prioritize Eventbrite and Meetup - they have the most consistent URL structures
 
-Return the events using the return_events function with all required fields populated.`
+5. Use interaction history to personalize:
+   - Find MORE events similar to saved ones
+   - AVOID events similar to removed ones
+
+Return events using the return_events function with valid URLs.`
           }
         ],
         tools: [
