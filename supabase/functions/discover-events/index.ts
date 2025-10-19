@@ -223,11 +223,13 @@ serve(async (req) => {
             role: 'system',
             content: `You are an event extraction and ranking assistant. Parse HTML from event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
 
-SCORING CRITERIA:
-- Interest Match (40 points): How many user interests align with the event
-- Vibe Match (30 points): How well the event atmosphere matches user vibes
-- Interaction History (20 points): Boost similar to saved events, downrank similar to removed events
-- Date Proximity (10 points): Events sooner get higher scores
+SCORING CRITERIA (total 100 points):
+- Interest Match (25 points): How many user interests align with the event
+- Vibe Match (20 points): How well the event atmosphere matches user vibes
+- Location Match (25 points): Events in ${city} get full points, nearby cities get partial, virtual/online get 0
+- In-Person Bonus (15 points): In-person events get full points, virtual/online get 0
+- Interaction History (10 points): Boost similar to saved events, downrank similar to removed events
+- Date Proximity (5 points): Events sooner get higher scores
 
 Return events sorted by score (highest first).`
           },
@@ -251,14 +253,19 @@ ${interactionContext}
 REQUIREMENTS:
 1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, meetup.com/group-name/events/123456, ticketmaster.com/event/ABC123, eventful.com/events/E0-001-123456)
 2. Parse event titles, dates, descriptions, and locations from the HTML
-3. Remove duplicate events (same URL or same title/venue/date)
-4. Only include events with specific dates between ${today} and ${nextWeek}
-5. Format dates as YYYY-MM-DD
-6. Calculate relevance_score (0-100) for each event based on user preferences and interaction history
-7. Sort events by relevance_score (highest first)
-8. Extract detailed descriptions (at least 2-3 sentences)
-9. Include specific venue names and addresses in location field
-10. Ensure each URL is a direct link to a specific event page, not a listing page
+3. Identify if event is in-person or virtual/online - prefer in-person events
+4. Check if event location is in ${city} - prioritize local events
+5. Remove duplicate events (same URL or same title/venue/date)
+6. Only include events with specific dates between ${today} and ${nextWeek}
+7. Format dates as YYYY-MM-DD
+8. Calculate relevance_score (0-100) for each event:
+   - Give high scores to in-person events in ${city} that match user interests
+   - Give lower scores to virtual/online events or events outside ${city}
+   - Consider interaction history to boost/downrank events
+9. Sort events by relevance_score (highest first)
+10. Extract detailed descriptions (at least 2-3 sentences)
+11. Include specific venue names and addresses in location field
+12. Ensure each URL is a direct link to a specific event page, not a listing page
 
 Return events using the return_events function.`
           }
