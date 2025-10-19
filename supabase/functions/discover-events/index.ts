@@ -68,13 +68,9 @@ serve(async (req) => {
     console.log('User interests:', userInterests);
     console.log('User vibes:', userVibes);
 
-    // Get API keys
-    const BRAVE_API_KEY = Deno.env.get('BRAVE_SEARCH_API_KEY');
+    // Get API key
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     
-    if (!BRAVE_API_KEY) {
-      throw new Error('BRAVE_SEARCH_API_KEY not configured');
-    }
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
     }
@@ -82,59 +78,77 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Step 1: Perform multiple targeted Brave searches
-    const interestsList = interests.slice(0, 4).map(i => i.interest); // Top 4 interests
-    const vibesList = vibes.slice(0, 3).map(v => v.vibe); // Top 3 vibes
+    // Step 1: Scrape major event platforms
+    const interestsList = interests.slice(0, 4).map(i => i.interest);
+    const vibesList = vibes.slice(0, 3).map(v => v.vibe);
     
-    console.log(`Performing ${interestsList.length * vibesList.length} targeted searches`);
+    console.log(`Scraping event platforms for ${city}`);
     
-    const allSearchResults: any[] = [];
+    const allScrapedData: any[] = [];
     
-    // Search for each interest + vibe combination
+    // Scrape Eventbrite
     for (const interest of interestsList) {
-      for (const vibe of vibesList) {
-        const searchQuery = `${interest} ${vibe} events in ${city} ${today} to ${nextWeek}`;
-        console.log('Brave search:', searchQuery);
-
-        try {
-          const braveResponse = await fetch(
-            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=20`,
-            {
-              method: 'GET',
-              headers: {
-                'Accept': 'application/json',
-                'Accept-Encoding': 'gzip',
-                'X-Subscription-Token': BRAVE_API_KEY,
-              },
-            }
-          );
-
-          if (braveResponse.ok) {
-            const braveData = await braveResponse.json();
-            const results = braveData.web?.results?.slice(0, 10).map((result: any) => ({
-              title: result.title,
-              description: result.description,
-              url: result.url,
-              searchContext: { interest, vibe }
-            })) || [];
-            
-            allSearchResults.push(...results);
-            console.log(`Found ${results.length} results for ${interest} + ${vibe}`);
-          }
-        } catch (error) {
-          console.error(`Search failed for ${interest} + ${vibe}:`, error);
-          // Continue with other searches
+      const eventbriteUrl = `https://www.eventbrite.com/d/${city.toLowerCase().replace(/\s+/g, '-')}/events--${interest.toLowerCase().replace(/\s+/g, '-')}/`;
+      console.log('Scraping Eventbrite:', eventbriteUrl);
+      
+      try {
+        const response = await fetch(eventbriteUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: 'eventbrite',
+            interest,
+            url: eventbriteUrl,
+            content: html.substring(0, 50000) // Limit to first 50k chars
+          });
+          console.log(`Scraped Eventbrite for ${interest}`);
         }
+      } catch (error) {
+        console.log(`Failed to scrape Eventbrite for ${interest}:`, error);
+      }
+    }
+    
+    // Scrape Meetup
+    for (const interest of interestsList.slice(0, 2)) {
+      const meetupUrl = `https://www.meetup.com/find/?location=${encodeURIComponent(city)}&keywords=${encodeURIComponent(interest)}`;
+      console.log('Scraping Meetup:', meetupUrl);
+      
+      try {
+        const response = await fetch(meetupUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: 'meetup',
+            interest,
+            url: meetupUrl,
+            content: html.substring(0, 50000)
+          });
+          console.log(`Scraped Meetup for ${interest}`);
+        }
+      } catch (error) {
+        console.log(`Failed to scrape Meetup for ${interest}:`, error);
       }
     }
 
-    console.log(`Total search results collected: ${allSearchResults.length}`);
+    console.log(`Total pages scraped: ${allScrapedData.length}`);
 
-    if (allSearchResults.length === 0) {
+    if (allScrapedData.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: false,
-          error: 'No events found in web search. Try different interests or location.',
+          error: 'Failed to scrape event platforms. Please try again.',
           eventsCount: 0
         }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
@@ -153,16 +167,17 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction assistant. Analyze web search results and extract REAL events with accurate information. Only include events that have clear dates, locations, and valid event page URLs. Remove duplicates.`
+            content: `You are an event extraction assistant. Parse HTML from event platforms (Eventbrite, Meetup) and extract REAL upcoming events with EXACT event page URLs. Only return events with complete information.`
           },
           {
             role: 'user',
-            content: `Here are web search results for events in ${city}:
+            content: `Here is scraped HTML content from event platforms in ${city}:
 
-${allSearchResults.map((r: any, i: number) => `[${i + 1}] ${r.title}
-URL: ${r.url}
-Context: ${r.searchContext.interest} / ${r.searchContext.vibe}
-${r.description}`).join('\n\n')}
+${allScrapedData.map((data: any, i: number) => `[Source ${i + 1}: ${data.source} - ${data.interest}]
+URL: ${data.url}
+HTML Content:
+${data.content}
+---`).join('\n\n')}
 
 Extract 15-20 unique upcoming events happening between ${today} and ${nextWeek}.
 
@@ -172,17 +187,16 @@ User preferences:
 ${interactionContext}
 
 REQUIREMENTS:
-1. Use the ACTUAL URLs from the search results above
-2. Remove duplicate events (same URL or same title/venue/date)
-3. Only include events with specific dates between ${today} and ${nextWeek}
-4. Format dates as YYYY-MM-DD
-5. Match events to the most relevant interests and vibes from the search context
-6. Verify each URL is an actual event page (not just a venue homepage)
-7. If a result doesn't have enough info to be a complete event, skip it
-8. Prioritize events from Eventbrite, Meetup, Facebook Events, Ticketmaster, and official venue sites
-9. Extract detailed descriptions (at least 2-3 sentences when available)
-10. Include specific venue names and addresses in location field
-11. Match multiple interests/vibes per event when relevant
+1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, meetup.com/group-name/events/123456)
+2. Parse event titles, dates, descriptions, and locations from the HTML
+3. Remove duplicate events (same URL or same title/venue/date)
+4. Only include events with specific dates between ${today} and ${nextWeek}
+5. Format dates as YYYY-MM-DD
+6. Match events to user interests: ${userInterests}
+7. Match events to user vibes: ${userVibes}
+8. Extract detailed descriptions (at least 2-3 sentences)
+9. Include specific venue names and addresses in location field
+10. Ensure each URL is a direct link to a specific event page, not a listing page
 
 Return events using the return_events function.`
           }
