@@ -4,9 +4,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles, Trash2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles, Trash2, List, CalendarDays } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { isPast, parseISO } from "date-fns";
+import { isPast, parseISO, format, isSameDay } from "date-fns";
+import logoIcon from "@/assets/logo-icon.png";
+import { cn } from "@/lib/utils";
 
 interface Event {
   id: string;
@@ -26,6 +30,7 @@ interface Event {
 const Saved = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -62,7 +67,14 @@ const Saved = () => {
         attendance: attendanceData?.find(a => a.event_id === event.id)
       })) || [];
 
-      setEvents(eventsWithAttendance);
+      // Sort by date - soonest first
+      const sortedEvents = eventsWithAttendance.sort((a, b) => {
+        const dateA = parseISO(a.date);
+        const dateB = parseISO(b.date);
+        return dateA.getTime() - dateB.getTime();
+      });
+
+      setEvents(sortedEvents);
     } catch (error) {
       console.error('Error fetching saved events:', error);
       toast({
@@ -150,6 +162,14 @@ const Saved = () => {
     }
   };
 
+  // Get all event dates for calendar highlighting
+  const eventDates = events.map(event => parseISO(event.date));
+  
+  // Get events for selected date
+  const selectedDateEvents = selectedDate
+    ? events.filter(event => isSameDay(parseISO(event.date), selectedDate))
+    : [];
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-subtle">
@@ -165,8 +185,8 @@ const Saved = () => {
               Back to Discover
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 SpotOn
@@ -197,8 +217,8 @@ const Saved = () => {
               Back to Discover
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 SpotOn
@@ -228,8 +248,8 @@ const Saved = () => {
             Back to Discover
           </Button>
           <div className="flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+              <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
             </div>
             <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
               SpotOn
@@ -239,99 +259,244 @@ const Saved = () => {
       </header>
       <div className="container mx-auto p-6">
         <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {events.map((event) => {
-          const eventDate = parseISO(event.date);
-          const isEventPast = isPast(eventDate);
+        
+        <Tabs defaultValue="list" className="w-full">
+          <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
+            <TabsTrigger value="list" className="gap-2">
+              <List className="h-4 w-4" />
+              List View
+            </TabsTrigger>
+            <TabsTrigger value="calendar" className="gap-2">
+              <CalendarDays className="h-4 w-4" />
+              Calendar View
+            </TabsTrigger>
+          </TabsList>
 
-          return (
-            <Card key={event.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <CardTitle>{event.title}</CardTitle>
-                <CardDescription>
-                  <div className="flex items-center gap-2 mt-2">
-                    <Calendar className="h-4 w-4" />
-                    {event.date}
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <MapPin className="h-4 w-4" />
-                    {event.location}
-                  </div>
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
-                
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {event.interests.map((interest) => (
-                    <Badge key={interest} variant="secondary">
-                      {interest}
-                    </Badge>
-                  ))}
-                </div>
+          <TabsContent value="list">
+            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+              {events.map((event) => {
+                const eventDate = parseISO(event.date);
+                const isEventPast = isPast(eventDate);
 
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {event.vibes.map((vibe) => (
-                    <Badge key={vibe} variant="outline">
-                      {vibe}
-                    </Badge>
-                  ))}
-                </div>
+                return (
+                  <Card key={event.id} className="hover:shadow-lg transition-shadow">
+                    <CardHeader>
+                      <CardTitle>{event.title}</CardTitle>
+                      <CardDescription>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Calendar className="h-4 w-4" />
+                          {format(eventDate, "PPP")}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <MapPin className="h-4 w-4" />
+                          {event.location}
+                        </div>
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
+                      
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {event.interests.map((interest) => (
+                          <Badge key={interest} variant="secondary">
+                            {interest}
+                          </Badge>
+                        ))}
+                      </div>
 
-                {isEventPast && event.attendance ? (
-                  <div className="flex flex-col gap-2 mt-4">
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'attended')}
-                        className="flex-1"
-                      >
-                        <Check className="h-4 w-4 mr-1" />
-                        Attended
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'not_attended')}
-                        className="flex-1"
-                      >
-                        <X className="h-4 w-4 mr-1" />
-                        Did Not Attend
-                      </Button>
-                    </div>
-                  </div>
+                      <div className="flex flex-wrap gap-2 mb-4">
+                        {event.vibes.map((vibe) => (
+                          <Badge key={vibe} variant="outline">
+                            {vibe}
+                          </Badge>
+                        ))}
+                      </div>
+
+                      {isEventPast && event.attendance ? (
+                        <div className="flex flex-col gap-2 mt-4">
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'attended')}
+                              className="flex-1"
+                            >
+                              <Check className="h-4 w-4 mr-1" />
+                              Attended
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'not_attended')}
+                              className="flex-1"
+                            >
+                              <X className="h-4 w-4 mr-1" />
+                              Did Not Attend
+                            </Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col gap-2 mt-4">
+                          {event.event_link && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(event.event_link!, '_blank')}
+                              className="w-full"
+                            >
+                              <ExternalLink className="h-4 w-4 mr-1" />
+                              View Event
+                            </Button>
+                          )}
+                          {event.attendance && (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleRemoveEvent(event.attendance!.id)}
+                              className="w-full"
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Remove from Saved
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="calendar">
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Calendar */}
+              <div className="flex justify-center">
+                <CalendarComponent
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={setSelectedDate}
+                  className={cn("rounded-md border shadow-card pointer-events-auto")}
+                  modifiers={{
+                    hasEvent: eventDates
+                  }}
+                  modifiersClassNames={{
+                    hasEvent: "bg-primary/20 font-bold"
+                  }}
+                />
+              </div>
+
+              {/* Events for selected date */}
+              <div>
+                {selectedDate ? (
+                  <>
+                    <h2 className="text-2xl font-bold mb-4">
+                      Events on {format(selectedDate, "PPP")}
+                    </h2>
+                    {selectedDateEvents.length > 0 ? (
+                      <div className="space-y-4">
+                        {selectedDateEvents.map((event) => {
+                          const eventDate = parseISO(event.date);
+                          const isEventPast = isPast(eventDate);
+
+                          return (
+                            <Card key={event.id} className="hover:shadow-lg transition-shadow">
+                              <CardHeader>
+                                <CardTitle>{event.title}</CardTitle>
+                                <CardDescription>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <MapPin className="h-4 w-4" />
+                                    {event.location}
+                                  </div>
+                                </CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                <p className="text-sm text-muted-foreground mb-4">{event.description}</p>
+                                
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {event.interests.map((interest) => (
+                                    <Badge key={interest} variant="secondary">
+                                      {interest}
+                                    </Badge>
+                                  ))}
+                                </div>
+
+                                <div className="flex flex-wrap gap-2 mb-4">
+                                  {event.vibes.map((vibe) => (
+                                    <Badge key={vibe} variant="outline">
+                                      {vibe}
+                                    </Badge>
+                                  ))}
+                                </div>
+
+                                {isEventPast && event.attendance ? (
+                                  <div className="flex flex-col gap-2 mt-4">
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'attended')}
+                                        className="flex-1"
+                                      >
+                                        <Check className="h-4 w-4 mr-1" />
+                                        Attended
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'not_attended')}
+                                        className="flex-1"
+                                      >
+                                        <X className="h-4 w-4 mr-1" />
+                                        Did Not Attend
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex flex-col gap-2 mt-4">
+                                    {event.event_link && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => window.open(event.event_link!, '_blank')}
+                                        className="w-full"
+                                      >
+                                        <ExternalLink className="h-4 w-4 mr-1" />
+                                        View Event
+                                      </Button>
+                                    )}
+                                    {event.attendance && (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => handleRemoveEvent(event.attendance!.id)}
+                                        className="w-full"
+                                      >
+                                        <Trash2 className="h-4 w-4 mr-1" />
+                                        Remove from Saved
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
+                              </CardContent>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-muted-foreground">No events scheduled for this date</p>
+                    )}
+                  </>
                 ) : (
-                  <div className="flex flex-col gap-2 mt-4">
-                    {event.event_link && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => window.open(event.event_link!, '_blank')}
-                        className="w-full"
-                      >
-                        <ExternalLink className="h-4 w-4 mr-1" />
-                        View Event
-                      </Button>
-                    )}
-                    {event.attendance && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleRemoveEvent(event.attendance!.id)}
-                        className="w-full"
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Remove from Saved
-                      </Button>
-                    )}
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground text-center">
+                      Select a date on the calendar to view events
+                    </p>
                   </div>
                 )}
-              </CardContent>
-            </Card>
-          );
-        })}
+              </div>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
-    </div>
     </div>
   );
 };
