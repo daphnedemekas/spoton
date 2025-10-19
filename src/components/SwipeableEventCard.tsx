@@ -24,11 +24,11 @@ interface SwipeableEventCardProps {
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
   ({ event, onOpenDetails }, ref) => {
     return (
-      <div ref={ref} className="absolute w-full h-full">
-        <Card className="h-full overflow-hidden border-border/50 bg-card shadow-card">
+      <div ref={ref} className="absolute inset-0 cursor-grab active:cursor-grabbing">
+        <Card className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-lg">
           <div className="h-full flex flex-col">
             {event.image_url && (
-              <div className="relative h-64 w-full overflow-hidden bg-muted">
+              <div className="relative h-64 w-full overflow-hidden bg-muted flex-shrink-0">
                 <img
                   src={event.image_url}
                   alt={event.title}

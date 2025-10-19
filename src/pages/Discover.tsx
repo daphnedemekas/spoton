@@ -327,14 +327,14 @@ export default function Discover() {
 
           {/* Swipe Cards */}
           <div className="relative mx-auto max-w-md">
-            <div className="relative h-[600px]">
+            <div className="relative h-[600px] w-full">
               {visibleCards.length > 0 ? (
                 visibleCards.map((event, index) => (
                   <TinderCard
                     key={event.id}
                     onSwipe={(dir) => handleSwipe(dir, event)}
                     preventSwipe={["up", "down"]}
-                    className="absolute w-full"
+                    className="absolute inset-0"
                     swipeRequirementType="position"
                     swipeThreshold={100}
                   >
