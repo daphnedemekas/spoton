@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isPast, parseISO } from "date-fns";
 
@@ -120,6 +120,31 @@ const Saved = () => {
       toast({
         title: "Error",
         description: "Failed to update attendance",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRemoveEvent = async (attendanceId: string) => {
+    try {
+      const { error } = await supabase
+        .from('event_attendance')
+        .delete()
+        .eq('id', attendanceId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Success",
+        description: "Event removed from saved",
+      });
+
+      fetchSavedEvents();
+    } catch (error) {
+      console.error('Error removing event:', error);
+      toast({
+        title: "Error",
+        description: "Failed to remove event",
         variant: "destructive",
       });
     }
@@ -254,37 +279,52 @@ const Saved = () => {
                 </div>
 
                 {isEventPast && event.attendance ? (
-                  <div className="flex gap-2 mt-4">
-                    <Button
-                      size="sm"
-                      onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'attended')}
-                      className="flex-1"
-                    >
-                      <Check className="h-4 w-4 mr-1" />
-                      Attended
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'not_attended')}
-                      className="flex-1"
-                    >
-                      <X className="h-4 w-4 mr-1" />
-                      Did Not Attend
-                    </Button>
+                  <div className="flex flex-col gap-2 mt-4">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'attended')}
+                        className="flex-1"
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Attended
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleAttendanceUpdate(event.id, event.attendance!.id, 'not_attended')}
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Did Not Attend
+                      </Button>
+                    </div>
                   </div>
                 ) : (
-                  event.event_link && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => window.open(event.event_link!, '_blank')}
-                      className="w-full mt-4"
-                    >
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                      View Event
-                    </Button>
-                  )
+                  <div className="flex flex-col gap-2 mt-4">
+                    {event.event_link && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.open(event.event_link!, '_blank')}
+                        className="w-full"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-1" />
+                        View Event
+                      </Button>
+                    )}
+                    {event.attendance && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleRemoveEvent(event.attendance!.id)}
+                        className="w-full"
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Remove from Saved
+                      </Button>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
