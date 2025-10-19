@@ -196,6 +196,33 @@ export default function Discover() {
     }
   }, [filteredEvents]);
 
+  // Auto-discover more events when running low
+  useEffect(() => {
+    const autoDiscover = async () => {
+      // Trigger discovery when we're down to 5 or fewer events
+      if (filteredEvents.length <= 5 && !loading) {
+        console.log('Running low on events, auto-discovering more...');
+        setLoading(true);
+        try {
+          const { data, error } = await supabase.functions.invoke('discover-events', {
+            body: {}
+          });
+          
+          if (error) throw error;
+          
+          console.log('Auto-discovery complete:', data);
+          await loadData();
+        } catch (error: any) {
+          console.error('Auto-discovery failed:', error);
+        } finally {
+          setLoading(false);
+        }
+      }
+    };
+
+    autoDiscover();
+  }, [filteredEvents.length, loading]);
+
   // Load more events as user swipes
   useEffect(() => {
     if (filteredEvents.length === 0) return;
@@ -374,11 +401,11 @@ export default function Discover() {
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center">
                     <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-                      <Sparkles className="h-10 w-10 text-muted-foreground" />
+                      <Sparkles className="h-10 w-10 text-muted-foreground animate-pulse" />
                     </div>
-                    <h2 className="mb-2 text-2xl font-semibold">No more events</h2>
-                    <p className="text-muted-foreground mb-4">
-                      Try discovering new events or adjusting your filter
+                    <h2 className="mb-2 text-2xl font-semibold">Discovering more events...</h2>
+                    <p className="text-muted-foreground">
+                      Finding new experiences for you
                     </p>
                   </div>
                 </div>

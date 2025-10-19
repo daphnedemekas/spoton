@@ -111,10 +111,19 @@ serve(async (req) => {
 
     const now = new Date();
     const today = now.toISOString().split('T')[0];
-    const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1; // 0-indexed
     const currentDay = now.getDate();
+    
+    // Generate array of next 7 days for day-by-day searching
+    const searchDays = Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(now.getTime() + i * 24 * 60 * 60 * 1000);
+      return {
+        date: date.toISOString().split('T')[0],
+        dayName: date.toLocaleDateString('en-US', { weekday: 'long' }),
+        monthDay: date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+      };
+    });
 
     // Step 1: Check for cached website suggestions
     const interestsList = shuffledInterests; // Use shuffled interests
@@ -413,7 +422,7 @@ HTML Content:
 ${data.content}
 ---`).join('\n\n')}
 
-Extract 30-40 unique upcoming events happening between ${today} and ${nextWeek}. ${extractionPrompt}
+Extract 30-40 unique upcoming events happening in the next 7 days (${today} onwards). ${extractionPrompt}
 
 User preferences:
 - Interests: ${userInterests}
@@ -426,7 +435,7 @@ REQUIREMENTS:
 3. Identify if event is in-person or virtual/online - prefer in-person events
 4. Check if event location is in ${city} - prioritize local events
 5. Remove duplicate events (same URL or same title/venue/date)
-6. Only include events with specific dates between ${today} and ${nextWeek}
+6. Only include events with specific dates in the next 7 days (starting from ${today})
 7. Format dates as YYYY-MM-DD
 8. Calculate relevance_score (0-100) for each event:
    - Give high scores to in-person events in ${city} that match user interests
@@ -443,7 +452,7 @@ CRITICAL DATE PARSING RULES:
 - When you see dates like "Dec 15" or "December 15", they mean ${currentYear}-12-15
 - When you see dates like "Jan 10", they mean ${currentYear + 1}-01-10 (next year if we're past January)
 - If an event shows "Mon, Dec 15" or similar without a year, assume ${currentYear} if the date hasn't passed yet
-- Always double-check that parsed dates fall between ${today} and ${nextWeek}
+- Always double-check that parsed dates are within 7 days from ${today}
 - Do NOT extract events that are more than 7 days away
 - If a date seems unclear, skip that event rather than guessing
 
@@ -671,7 +680,7 @@ Return events using the return_events function.`
             },
             {
               role: 'user',
-              content: `Find ${10 - finalEvents.length} upcoming events in ${city} between ${today} and ${nextWeek} with SPECIFIC event page URLs (not general /events/ pages).
+              content: `Find ${10 - finalEvents.length} upcoming events in ${city} in the next 7 days (starting from ${today}) with SPECIFIC event page URLs (not general /events/ pages).
 
 Interests: ${userInterests}
 Vibes: ${userVibes}
