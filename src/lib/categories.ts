@@ -142,7 +142,7 @@ export const VIBE_CATEGORIES: VibeCategory[] = [
   {
     name: "Energy Level",
     icon: Zap,
-    items: ["High-Energy", "Chill", "Intimate", "Lively"],
+    items: ["High-Energy", "Chill", "Intimate"],
   },
   {
     name: "Social Style",
@@ -166,21 +166,6 @@ export const VIBE_CATEGORIES: VibeCategory[] = [
       "Rooftop",
       "Historic Venue",
       "Unconventional",
-    ],
-  },
-  {
-    name: "Mood",
-    icon: Smile,
-    items: [
-      "Inspiring",
-      "Festive",
-      "Contemplative",
-      "Adventurous",
-      "Educational",
-      "Quirky",
-      "Luxurious",
-      "Casual",
-      "Spiritual",
     ],
   },
   {
