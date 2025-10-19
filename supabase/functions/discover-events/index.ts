@@ -78,94 +78,115 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Step 1: Scrape major event platforms
+    // Step 1: Ask Gemini for best websites to scrape based on interests
     const interestsList = interests.slice(0, 4).map(i => i.interest);
-    const vibesList = vibes.slice(0, 3).map(v => v.vibe);
     
-    console.log(`Scraping event platforms for ${city}`);
+    console.log('Asking Gemini for website suggestions...');
     
-    const allScrapedData: any[] = [];
-    
-    // Scrape Eventbrite
-    for (const interest of interestsList) {
-      const eventbriteUrl = `https://www.eventbrite.com/d/${city.toLowerCase().replace(/\s+/g, '-')}/events--${interest.toLowerCase().replace(/\s+/g, '-')}/`;
-      console.log('Scraping Eventbrite:', eventbriteUrl);
-      
-      try {
-        const response = await fetch(eventbriteUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    const websiteSuggestionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an event discovery expert. Given user interests and a city, suggest the best event websites to scrape.`
           },
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          allScrapedData.push({
-            source: 'eventbrite',
-            interest,
-            url: eventbriteUrl,
-            content: html.substring(0, 50000) // Limit to first 50k chars
-          });
-          console.log(`Scraped Eventbrite for ${interest}`);
-        }
-      } catch (error) {
-        console.log(`Failed to scrape Eventbrite for ${interest}:`, error);
-      }
-    }
-    
-    // Scrape Ticketmaster
-    for (const interest of interestsList.slice(0, 2)) {
-      const ticketmasterUrl = `https://www.ticketmaster.com/search?q=${encodeURIComponent(interest + ' ' + city)}`;
-      console.log('Scraping Ticketmaster:', ticketmasterUrl);
-      
-      try {
-        const response = await fetch(ticketmasterUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          allScrapedData.push({
-            source: 'ticketmaster',
-            interest,
-            url: ticketmasterUrl,
-            content: html.substring(0, 50000)
-          });
-          console.log(`Scraped Ticketmaster for ${interest}`);
-        }
-      } catch (error) {
-        console.log(`Failed to scrape Ticketmaster for ${interest}:`, error);
-      }
+          {
+            role: 'user',
+            content: `City: ${city}
+Interests: ${interestsList.join(', ')}
+
+Suggest 10-15 specific event listing URLs to scrape for these interests in ${city}. Include:
+- Eventbrite category pages
+- Ticketmaster search pages
+- Local event calendars
+- Venue websites
+- Festival/event aggregators
+
+Return actual scrapable URLs, not just domain names.`
+          }
+        ],
+        tools: [
+          {
+            type: "function",
+            function: {
+              name: "suggest_websites",
+              description: "Return website URLs to scrape",
+              parameters: {
+                type: "object",
+                properties: {
+                  websites: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        url: { type: "string" },
+                        source: { type: "string" },
+                        interest: { type: "string" }
+                      },
+                      required: ["url", "source", "interest"]
+                    }
+                  }
+                },
+                required: ["websites"]
+              }
+            }
+          }
+        ],
+        tool_choice: { type: "function", function: { name: "suggest_websites" } }
+      }),
+    });
+
+    if (!websiteSuggestionResponse.ok) {
+      console.error('Failed to get website suggestions');
+      throw new Error('Failed to get website suggestions');
     }
 
-    // Scrape Eventful
-    const eventfulUrl = `https://eventful.com/events?l=${encodeURIComponent(city)}`;
-    console.log('Scraping Eventful:', eventfulUrl);
+    const websiteData = await websiteSuggestionResponse.json();
+    const websiteToolCall = websiteData.choices?.[0]?.message?.tool_calls?.[0];
     
-    try {
-      const response = await fetch(eventfulUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        signal: AbortSignal.timeout(10000)
-      });
+    if (!websiteToolCall) {
+      throw new Error('No website suggestions returned');
+    }
+
+    const suggestedWebsites = typeof websiteToolCall.function.arguments === 'string' 
+      ? JSON.parse(websiteToolCall.function.arguments)
+      : websiteToolCall.function.arguments;
+
+    console.log(`Gemini suggested ${suggestedWebsites.websites.length} websites to scrape`);
+
+    // Step 2: Scrape the suggested websites
+    const allScrapedData: any[] = [];
+    
+    for (const website of suggestedWebsites.websites) {
+      console.log(`Scraping: ${website.url}`);
       
-      if (response.ok) {
-        const html = await response.text();
-        allScrapedData.push({
-          source: 'eventful',
-          interest: 'general',
-          url: eventfulUrl,
-          content: html.substring(0, 50000)
+      try {
+        const response = await fetch(website.url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
         });
-        console.log('Scraped Eventful');
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: website.source,
+            interest: website.interest,
+            url: website.url,
+            content: html.substring(0, 50000)
+          });
+          console.log(`Successfully scraped ${website.source} for ${website.interest}`);
+        }
+      } catch (error) {
+        console.log(`Failed to scrape ${website.url}:`, error);
       }
-    } catch (error) {
-      console.log('Failed to scrape Eventful:', error);
     }
 
     console.log(`Total pages scraped: ${allScrapedData.length}`);
@@ -181,7 +202,7 @@ serve(async (req) => {
       );
     }
 
-    // Step 2: Use Gemini to process and extract structured events
+    // Step 3: Use Gemini to process and extract structured events
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -193,7 +214,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction and ranking assistant. Parse HTML from event platforms (Eventbrite, Ticketmaster, Eventful) and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
+            content: `You are an event extraction and ranking assistant. Parse HTML from various event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
 
 SCORING CRITERIA (total 100 points):
 - Interest Match (25 points): How many user interests align with the event
@@ -223,7 +244,7 @@ User preferences:
 ${interactionContext}
 
 REQUIREMENTS:
-1. Extract SPECIFIC event page URLs from the HTML (e.g., eventbrite.com/e/event-name-123456, ticketmaster.com/event/ABC123, eventful.com/events/E0-001-123456)
+1. Extract SPECIFIC event page URLs from the HTML (not listing pages)
 2. Parse event titles, dates, descriptions, and locations from the HTML
 3. Identify if event is in-person or virtual/online - prefer in-person events
 4. Check if event location is in ${city} - prioritize local events
