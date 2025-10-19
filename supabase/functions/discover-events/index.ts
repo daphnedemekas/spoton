@@ -316,7 +316,7 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     const scrapingStatus: any[] = [];
     
     // Parallel scraping helper with concurrency limit
-    const CONCURRENCY_LIMIT = 5;
+    const CONCURRENCY_LIMIT = 10;
     
     const scrapeWebsite = async (website: any) => {
       console.log(`Scraping: ${website.url}`);
@@ -508,9 +508,22 @@ Return events using the return_events function.`
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Helper function to verify URL accessibility
+    // Helper function to verify URL accessibility (with trusted domain skip)
+    const trustedDomains = [
+      'eventbrite.com', 'sfjazz.org', 'sfmoma.org', 'goldengate.org',
+      'sfbike.org', 'exploratorium.edu', 'asianart.org', 'sfpl.org',
+      'timeout.com', 'ticketmaster.com', 'axs.com', 'universe.com'
+    ];
+    
     const verifyUrl = async (url: string): Promise<boolean> => {
       try {
+        // Skip verification for trusted domains
+        const urlObj = new URL(url);
+        if (trustedDomains.some(domain => urlObj.hostname.includes(domain))) {
+          console.log(`Trusted domain, skipping verification: ${urlObj.hostname}`);
+          return true;
+        }
+        
         const response = await fetch(url, {
           method: 'HEAD',
           headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -555,6 +568,9 @@ Return events using the return_events function.`
       return `${title}|${event.date}|${location}`;
     };
     
+    // First pass: Basic validation and format checking
+    const eventsToVerify = [];
+    
     for (const event of eventsData.events) {
       // Validate URL format
       const hasValidLink = event.event_link && 
@@ -592,18 +608,33 @@ Return events using the return_events function.`
         continue;
       }
 
-      // Verify URL actually works
-      const isWorking = await verifyUrl(event.event_link);
-      if (!isWorking) {
-        console.log(`Skipping event "${event.title}" - URL not accessible: ${event.event_link}`);
-        continue;
-      }
-
       seenUrls.add(normalizedUrl);
       seenSignatures.add(fuzzySignature);
-      validatedEvents.push(event);
+      eventsToVerify.push(event);
     }
 
+    // Second pass: Batch URL verification in parallel for speed
+    const verificationBatchSize = 10;
+    
+    for (let i = 0; i < eventsToVerify.length; i += verificationBatchSize) {
+      const batch = eventsToVerify.slice(i, i + verificationBatchSize);
+      const results = await Promise.all(
+        batch.map(async (event) => ({
+          event,
+          isValid: await verifyUrl(event.event_link)
+        }))
+      );
+      
+      // Add valid events to final list
+      for (const { event, isValid } of results) {
+        if (isValid) {
+          validatedEvents.push(event);
+        } else {
+          console.log(`Skipping event "${event.title}" - URL not accessible: ${event.event_link}`);
+        }
+      }
+    }
+    
     console.log(`${validatedEvents.length} events passed validation and URL verification`);
 
     // If less than 5 valid events, retry once
