@@ -6,7 +6,7 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
 import { ScrapingStatusPanel } from "@/components/ScrapingStatusPanel";
 import { SwipeableEventCard } from "@/components/SwipeableEventCard";
-import { Settings, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, RotateCcw } from "lucide-react";
+import { Settings, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, RotateCcw, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import TinderCard from "react-tinder-card";
 
@@ -40,6 +40,7 @@ export default function Discover() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [scrapedSites, setScrapedSites] = useState<any[]>([]);
   const [showScrapingPanel, setShowScrapingPanel] = useState(false);
+  const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   
   const currentIndexRef = useRef(currentIndex);
 
@@ -49,7 +50,25 @@ export default function Discover() {
 
   useEffect(() => {
     loadData();
+    loadPendingConnections();
   }, []);
+
+  const loadPendingConnections = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: pendingConnections } = await supabase
+        .from('user_connections')
+        .select('id')
+        .eq('connected_user_id', user.id)
+        .eq('status', 'pending');
+
+      setPendingConnectionsCount(pendingConnections?.length || 0);
+    } catch (error) {
+      console.error("Error loading pending connections:", error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -302,9 +321,14 @@ export default function Discover() {
                 variant="ghost"
                 size="icon"
                 onClick={() => navigate("/search")}
-                className="hover:bg-secondary"
+                className="hover:bg-secondary relative"
               >
-                <Search className="h-5 w-5" />
+                <Users className="h-5 w-5" />
+                {pendingConnectionsCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs text-primary-foreground">
+                    {pendingConnectionsCount}
+                  </span>
+                )}
               </Button>
               <Button
                 variant="ghost"

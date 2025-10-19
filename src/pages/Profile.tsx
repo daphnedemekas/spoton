@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings, Users, UserPlus, UserCheck, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +16,16 @@ type Profile = {
   city: string;
   first_name: string | null;
   last_name: string | null;
+  profile_picture_url: string | null;
+};
+
+type Connection = {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string;
+  city: string;
+  profile_picture_url: string | null;
 };
 
 type Event = {
@@ -43,9 +54,9 @@ export default function Profile() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [interests, setInterests] = useState<string[]>([]);
   const [vibes, setVibes] = useState<string[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
   const [connectionId, setConnectionId] = useState<string>();
-  const [connections, setConnections] = useState<Profile[]>([]);
 
   useEffect(() => {
     loadProfile();
@@ -442,6 +453,41 @@ export default function Profile() {
                   ))}
                 </div>
               </div>
+
+              {/* Connections */}
+              {connections.length > 0 && (
+                <div>
+                  <h3 className="mb-3 font-semibold flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Connections ({connections.length})
+                  </h3>
+                  <div className="flex flex-wrap gap-3">
+                    {connections.map((connection) => (
+                      <div
+                        key={connection.id}
+                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                        onClick={() => navigate(`/profile/${connection.id}`)}
+                      >
+                        <Avatar className="h-10 w-10">
+                          <AvatarImage src={connection.profile_picture_url || undefined} />
+                          <AvatarFallback className="bg-primary text-primary-foreground">
+                            {connection.first_name?.[0] || connection.email[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="text-sm">
+                          <div className="font-medium">
+                            {connection.first_name && connection.last_name
+                              ? `${connection.first_name} ${connection.last_name}`
+                              : connection.email.split("@")[0]
+                            }
+                          </div>
+                          <div className="text-xs text-muted-foreground">{connection.city}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
