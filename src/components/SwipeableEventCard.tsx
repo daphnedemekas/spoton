@@ -76,12 +76,13 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 </div>
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2" onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
+                    e.preventDefault();
                     onOpenDetails();
                   }}
                   className="flex-1 gap-2"
@@ -95,6 +96,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                     size="sm"
                     onClick={(e) => {
                       e.stopPropagation();
+                      e.preventDefault();
                       window.open(event.event_link, '_blank');
                     }}
                     className="flex-1 gap-2"
