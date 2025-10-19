@@ -123,15 +123,14 @@ serve(async (req) => {
               content: `City: ${city}
 Interests: ${interestsList.join(', ')}
 
-Suggest up to 50 specific URLs to scrape for these interests in ${city}. Think broadly - not just event platforms, but ANY website that would have relevant activities or opportunities:
+Suggest up to 15 specific URLs to scrape for these interests in ${city}. Think broadly - not just event platforms, but ANY website that would have relevant activities or opportunities:
 
 EXAMPLES of what to include:
-- Event platforms (Eventbrite, local event calendars)
+- Event platforms (Eventbrite, local event calendars, Meetup)
 - Venue websites (music venues, theaters, galleries, comedy clubs)
-- Activity-specific sites (yoga studios, meditation centers, climbing gyms, makerspaces)
+- Activity-specific sites (yoga studios, meditation centers, climbing gyms)
 - Outdoor recreation (AllTrails, park websites, hiking groups)
 - Community centers and libraries
-- Meetup alternatives and local groups
 - Festival and market calendars
 - Sports leagues and recreational programs
 - Workshop and class providers
@@ -242,106 +241,19 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       console.log(`Brave Search suggested ${braveWebsites.length} total websites`);
     }
 
-    // Combine Gemini and Brave suggestions
+    // Combine Gemini and Brave suggestions, limit to 20 total
     const allWebsites = [
       ...suggestedWebsites.websites,
       ...braveWebsites
-    ];
+    ].slice(0, 20); // Limit to 20 sites
     console.log(`Total websites to scrape: ${allWebsites.length}`);
 
     // Step 2: Scrape the suggested websites
     const allScrapedData: any[] = [];
     const scrapingStatus: any[] = [];
     
-    // Step 2a: Scrape standard platforms (Eventbrite, Ticketmaster, Eventful)
-    console.log('Scraping standard event platforms...');
-    
-    // Scrape Eventbrite
-    for (const interest of interestsList) {
-      const eventbriteUrl = `https://www.eventbrite.com/d/${city.toLowerCase().replace(/\s+/g, '-')}/events--${interest.toLowerCase().replace(/\s+/g, '-')}/`;
-      console.log('Scraping Eventbrite:', eventbriteUrl);
-      
-      try {
-        const response = await fetch(eventbriteUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          allScrapedData.push({
-            source: 'eventbrite',
-            interest,
-            url: eventbriteUrl,
-            content: html.substring(0, 50000)
-          });
-          scrapingStatus.push({ url: eventbriteUrl, source: 'Eventbrite', interest, status: 'success' });
-          console.log(`Scraped Eventbrite for ${interest}`);
-        }
-      } catch (error) {
-        scrapingStatus.push({ url: eventbriteUrl, source: 'Eventbrite', interest, status: 'failed', error: String(error) });
-        console.log(`Failed to scrape Eventbrite for ${interest}:`, error);
-      }
-    }
-    
-    // Scrape Ticketmaster
-    for (const interest of interestsList.slice(0, 2)) {
-      const ticketmasterUrl = `https://www.ticketmaster.com/search?q=${encodeURIComponent(interest + ' ' + city)}`;
-      console.log('Scraping Ticketmaster:', ticketmasterUrl);
-      
-      try {
-        const response = await fetch(ticketmasterUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          signal: AbortSignal.timeout(10000)
-        });
-        
-        if (response.ok) {
-          const html = await response.text();
-          allScrapedData.push({
-            source: 'ticketmaster',
-            interest,
-            url: ticketmasterUrl,
-            content: html.substring(0, 50000)
-          });
-          console.log(`Scraped Ticketmaster for ${interest}`);
-        }
-      } catch (error) {
-        console.log(`Failed to scrape Ticketmaster for ${interest}:`, error);
-      }
-    }
-
-    // Scrape Eventful
-    const eventfulUrl = `https://eventful.com/events?l=${encodeURIComponent(city)}`;
-    console.log('Scraping Eventful:', eventfulUrl);
-    
-    try {
-      const response = await fetch(eventfulUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        signal: AbortSignal.timeout(10000)
-      });
-      
-      if (response.ok) {
-        const html = await response.text();
-        allScrapedData.push({
-          source: 'eventful',
-          interest: 'general',
-          url: eventfulUrl,
-          content: html.substring(0, 50000)
-        });
-        console.log('Scraped Eventful');
-      }
-    } catch (error) {
-      console.log('Failed to scrape Eventful:', error);
-    }
-
-    // Step 2b: Scrape Gemini-suggested websites
-    console.log('Scraping Gemini-suggested websites...');
+    // Scrape websites - ensure we include major event platforms
+    console.log('Scraping suggested websites...');
     
     for (const website of allWebsites) {
       console.log(`Scraping: ${website.url}`);
