@@ -51,10 +51,6 @@ export default function Discover() {
     loadData();
   }, []);
 
-  useEffect(() => {
-    loadMoreEvents();
-  }, [allEvents, currentIndex]);
-
   const loadData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -86,18 +82,6 @@ export default function Discover() {
     }
   };
 
-  const loadMoreEvents = () => {
-    if (allEvents.length === 0) return;
-    
-    const remaining = filteredEvents.length - currentIndex;
-    if (remaining < 5 && displayedEvents.length < filteredEvents.length) {
-      const nextBatch = filteredEvents.slice(
-        displayedEvents.length,
-        displayedEvents.length + BATCH_SIZE
-      );
-      setDisplayedEvents(prev => [...prev, ...nextBatch]);
-    }
-  };
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -183,6 +167,29 @@ export default function Discover() {
       }
     });
   }, [allEvents, timeFilter]);
+
+  // Initialize displayed events when filtered events change
+  useEffect(() => {
+    if (filteredEvents.length > 0) {
+      const initialBatch = filteredEvents.slice(0, BATCH_SIZE);
+      setDisplayedEvents(initialBatch);
+      setCurrentIndex(0);
+    }
+  }, [filteredEvents]);
+
+  // Load more events as user swipes
+  useEffect(() => {
+    if (allEvents.length === 0) return;
+    
+    const remaining = filteredEvents.length - currentIndex;
+    if (remaining < 5 && displayedEvents.length < filteredEvents.length) {
+      const nextBatch = filteredEvents.slice(
+        displayedEvents.length,
+        displayedEvents.length + BATCH_SIZE
+      );
+      setDisplayedEvents(prev => [...prev, ...nextBatch]);
+    }
+  }, [displayedEvents, currentIndex, filteredEvents, allEvents]);
 
   const visibleCards = useMemo(() => {
     return displayedEvents.slice(currentIndex, currentIndex + 3);
