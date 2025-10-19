@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
+import { ScrapingStatusPanel } from "@/components/ScrapingStatusPanel";
 import { Settings, Calendar, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -34,6 +35,8 @@ export default function Discover() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
+  const [scrapedSites, setScrapedSites] = useState<any[]>([]);
+  const [showScrapingPanel, setShowScrapingPanel] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -153,36 +156,6 @@ export default function Discover() {
     }
   };
 
-  const getColorSuggestions = async () => {
-    try {
-      toast({
-        title: "Asking Gemini...",
-        description: "Getting color scheme suggestions",
-      });
-
-      const { data, error } = await supabase.functions.invoke("suggest-colors", {
-        body: { preferences: "muted, professional, and easy on the eyes" },
-      });
-
-      if (error) throw error;
-
-      toast({
-        title: "Color Suggestions from Gemini",
-        description: data.suggestion,
-        duration: 15000,
-      });
-
-      console.log("Gemini color suggestions:", data.suggestion);
-    } catch (error) {
-      console.error("Error getting color suggestions:", error);
-      toast({
-        title: "Error",
-        description: "Failed to get color suggestions",
-        variant: "destructive",
-      });
-    }
-  };
-
   const filteredEvents = events.filter((event) => {
     const eventDate = new Date(event.date);
     const today = new Date();
@@ -276,22 +249,23 @@ export default function Discover() {
               <MapPin className="h-4 w-4" />
               <span className="text-sm">{userCity}</span>
             </div>
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center justify-between">
               <h1 className="text-4xl font-bold">Discover Events</h1>
-              <div className="flex gap-2">
-                <Button onClick={getColorSuggestions} variant="outline" size="sm">
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Get Color Suggestions
-                </Button>
               <Button
                 onClick={async () => {
                   setLoading(true);
+                  setShowScrapingPanel(true);
+                  setScrapedSites([]);
                   try {
                     const { data, error } = await supabase.functions.invoke('discover-events', {
                       body: { userId: currentUserId }
                     });
                     
                     if (error) throw error;
+                    
+                    if (data.scrapingStatus) {
+                      setScrapedSites(data.scrapingStatus);
+                    }
                     
                     toast({
                       title: "Events discovered!",
@@ -314,7 +288,6 @@ export default function Discover() {
                 <Sparkles className="h-4 w-4" />
                 Discover New Events
               </Button>
-              </div>
             </div>
             <div className="mt-6 flex gap-3">
               <Button
@@ -335,6 +308,9 @@ export default function Discover() {
               </Button>
             </div>
           </div>
+
+          {/* Scraping Status Panel */}
+          <ScrapingStatusPanel sites={scrapedSites} isVisible={showScrapingPanel} />
 
           {/* Events Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

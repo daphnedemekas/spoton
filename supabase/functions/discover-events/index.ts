@@ -68,8 +68,9 @@ serve(async (req) => {
     console.log('User interests:', userInterests);
     console.log('User vibes:', userVibes);
 
-    // Get API key
+    // Get API keys
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    const BRAVE_API_KEY = Deno.env.get('BRAVE_SEARCH_API_KEY');
     
     if (!LOVABLE_API_KEY) {
       throw new Error('LOVABLE_API_KEY not configured');
@@ -199,9 +200,58 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       console.log('Cached website suggestions for future use');
     }
 
+    // Step 1b: Use Brave Search API to find additional event sites
+    const braveWebsites: any[] = [];
+    if (BRAVE_API_KEY) {
+      console.log('Using Brave Search to find event sites...');
+      
+      for (const interest of interestsList.slice(0, 5)) { // Limit to avoid rate limits
+        try {
+          const searchQuery = `${interest} events ${city} site:*.com OR site:*.org`;
+          const braveResponse = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
+            {
+              headers: {
+                'Accept': 'application/json',
+                'X-Subscription-Token': BRAVE_API_KEY
+              }
+            }
+          );
+
+          if (braveResponse.ok) {
+            const braveData = await braveResponse.json();
+            const results = braveData.web?.results || [];
+            
+            for (const result of results) {
+              // Filter for actual event listing pages
+              if (result.url && !result.url.includes('facebook.com') && !result.url.includes('twitter.com')) {
+                braveWebsites.push({
+                  url: result.url,
+                  source: `Brave: ${result.title?.substring(0, 30) || 'Event Site'}`,
+                  interest: interest
+                });
+              }
+            }
+            console.log(`Brave found ${results.length} sites for ${interest}`);
+          }
+        } catch (error) {
+          console.log(`Brave search failed for ${interest}:`, error);
+        }
+      }
+      
+      console.log(`Brave Search suggested ${braveWebsites.length} total websites`);
+    }
+
+    // Combine Gemini and Brave suggestions
+    const allWebsites = [
+      ...suggestedWebsites.websites,
+      ...braveWebsites
+    ];
+    console.log(`Total websites to scrape: ${allWebsites.length}`);
 
     // Step 2: Scrape the suggested websites
     const allScrapedData: any[] = [];
+    const scrapingStatus: any[] = [];
     
     // Step 2a: Scrape standard platforms (Eventbrite, Ticketmaster, Eventful)
     console.log('Scraping standard event platforms...');
@@ -227,9 +277,11 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
             url: eventbriteUrl,
             content: html.substring(0, 50000)
           });
+          scrapingStatus.push({ url: eventbriteUrl, source: 'Eventbrite', interest, status: 'success' });
           console.log(`Scraped Eventbrite for ${interest}`);
         }
       } catch (error) {
+        scrapingStatus.push({ url: eventbriteUrl, source: 'Eventbrite', interest, status: 'failed', error: String(error) });
         console.log(`Failed to scrape Eventbrite for ${interest}:`, error);
       }
     }
@@ -291,7 +343,7 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     // Step 2b: Scrape Gemini-suggested websites
     console.log('Scraping Gemini-suggested websites...');
     
-    for (const website of suggestedWebsites.websites) {
+    for (const website of allWebsites) {
       console.log(`Scraping: ${website.url}`);
       
       try {
@@ -310,6 +362,7 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
             url: website.url,
             content: html.substring(0, 50000)
           });
+          scrapingStatus.push({ url: website.url, source: website.source, interest: website.interest, status: 'success' });
           console.log(`Successfully scraped ${website.source} for ${website.interest}`);
         }
       } catch (error) {
@@ -656,7 +709,8 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       JSON.stringify({ 
         success: true, 
         eventsCount: insertedEvents?.length || 0,
-        message: `Discovered ${insertedEvents?.length || 0} events in ${city}`
+        message: `Discovered ${insertedEvents?.length || 0} events in ${city}`,
+        scrapingStatus: scrapingStatus
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

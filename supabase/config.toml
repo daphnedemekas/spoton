@@ -2,6 +2,3 @@ project_id = "eecdnlsbhcmllcjycpfa"
 
 [functions.discover-events]
 verify_jwt = false
-
-[functions.suggest-colors]
-verify_jwt = false
