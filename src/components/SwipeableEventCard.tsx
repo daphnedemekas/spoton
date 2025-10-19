@@ -40,7 +40,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
               </div>
             )}
             
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 pb-20">
               <div className="mb-4">
                 <h2 className="mb-2 text-2xl font-bold">{event.title}</h2>
                 <p className="text-sm text-muted-foreground line-clamp-3">
@@ -75,37 +75,43 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                   ))}
                 </div>
               </div>
-
-              <div className="flex gap-2" onPointerDown={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()}>
+            </div>
+            
+            {/* Fixed button bar at bottom - outside swipe area */}
+            <div 
+              className="absolute bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border p-4 flex gap-2"
+              style={{ pointerEvents: 'auto' }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onOpenDetails();
+                }}
+                className="flex-1 gap-2"
+              >
+                <Info className="h-4 w-4" />
+                More Info
+              </Button>
+              {event.event_link && (
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     e.preventDefault();
-                    onOpenDetails();
+                    window.open(event.event_link, '_blank');
                   }}
                   className="flex-1 gap-2"
                 >
-                  <Info className="h-4 w-4" />
-                  More Info
+                  <ExternalLink className="h-4 w-4" />
+                  Event Link
                 </Button>
-                {event.event_link && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      e.preventDefault();
-                      window.open(event.event_link, '_blank');
-                    }}
-                    className="flex-1 gap-2"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                    Event Link
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </Card>
