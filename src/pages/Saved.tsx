@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, ExternalLink, Check, X } from "lucide-react";
+import { Calendar, MapPin, ExternalLink, Check, X, ArrowLeft, Sparkles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isPast, parseISO } from "date-fns";
 
@@ -26,6 +27,7 @@ const Saved = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const fetchSavedEvents = async () => {
     try {
@@ -125,26 +127,94 @@ const Saved = () => {
 
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="min-h-screen bg-gradient-subtle">
+        <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="container mx-auto flex items-center justify-between px-4 py-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/discover")}
+              className="hover:bg-secondary"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Discover
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                SpotOn
+              </span>
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto p-6">
+          <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
   }
 
   if (events.length === 0) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
-        <p className="text-muted-foreground">No saved events yet. Discover events to save them!</p>
+      <div className="min-h-screen bg-gradient-subtle">
+        <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
+          <div className="container mx-auto flex items-center justify-between px-4 py-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/discover")}
+              className="hover:bg-secondary"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back to Discover
+            </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              </div>
+              <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                SpotOn
+              </span>
+            </div>
+          </div>
+        </header>
+        <div className="container mx-auto p-6">
+          <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
+          <p className="text-muted-foreground">No saved events yet. Discover events to save them!</p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div className="min-h-screen bg-gradient-subtle">
+      <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
+        <div className="container mx-auto flex items-center justify-between px-4 py-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate("/discover")}
+            className="hover:bg-secondary"
+          >
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Discover
+          </Button>
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
+              <Sparkles className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+              SpotOn
+            </span>
+          </div>
+        </div>
+      </header>
+      <div className="container mx-auto p-6">
+        <h1 className="text-4xl font-bold mb-8">Saved Events</h1>
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {events.map((event) => {
           const eventDate = parseISO(event.date);
           const isEventPast = isPast(eventDate);
@@ -221,6 +291,7 @@ const Saved = () => {
           );
         })}
       </div>
+    </div>
     </div>
   );
 };
