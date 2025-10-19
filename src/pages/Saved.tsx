@@ -75,6 +75,16 @@ const Saved = () => {
 
   useEffect(() => {
     fetchSavedEvents();
+
+    // Refresh when page becomes visible
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchSavedEvents();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
   }, []);
 
   const handleAttendanceUpdate = async (eventId: string, attendanceId: string, newStatus: 'attended' | 'not_attended') => {
