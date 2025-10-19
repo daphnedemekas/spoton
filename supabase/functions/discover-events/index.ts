@@ -273,11 +273,8 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
               const results = braveData.web?.results || [];
               
               for (const result of results) {
-                // Filter out social media, Meetup, and other unwanted sites
-                const excludedDomains = ['facebook.com', 'twitter.com', 'meetup.com', 'instagram.com'];
-                const isExcluded = excludedDomains.some(domain => result.url.includes(domain));
-                
-                if (result.url && !isExcluded) {
+                // Only filter out Meetup
+                if (result.url && !result.url.includes('meetup.com')) {
                   braveWebsites.push({
                     url: result.url,
                     source: `Brave: ${result.title?.substring(0, 30) || 'Event Site'}`,
@@ -664,11 +661,18 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       );
     }
 
-    // Smart event updates: only insert new events, keep existing ones
-    console.log('Fetching existing events for smart updates...');
+    // Smart event updates: only insert new events, keep existing ones, exclude removed events
+    console.log('Fetching existing events and removed interactions...');
     const { data: existingEvents } = await supabaseClient
       .from('events')
       .select('title, date, location, event_link');
+
+    // Get removed events from interaction history
+    const { data: removedInteractions } = await supabaseClient
+      .from('event_interactions')
+      .select('event_title, event_description')
+      .eq('user_id', userId)
+      .eq('interaction_type', 'removed');
 
     // Create a Set of existing event signatures for fast lookup
     const existingSignatures = new Set(
@@ -677,10 +681,26 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
       )
     );
 
-    // Filter out events that already exist
+    // Create a Set of removed event titles (case-insensitive)
+    const removedTitles = new Set(
+      (removedInteractions || []).map(r => r.event_title.toLowerCase().trim())
+    );
+
+    // Filter out events that already exist OR were previously removed
     const newEvents = validEvents.filter((event: any) => {
       const signature = `${event.title.toLowerCase().trim()}|${event.date}|${event.location.toLowerCase().trim()}`;
-      return !existingSignatures.has(signature);
+      const titleLower = event.title.toLowerCase().trim();
+      
+      // Skip if already exists or was removed
+      if (existingSignatures.has(signature)) {
+        console.log(`Skipping duplicate: ${event.title}`);
+        return false;
+      }
+      if (removedTitles.has(titleLower)) {
+        console.log(`Skipping removed event: ${event.title}`);
+        return false;
+      }
+      return true;
     });
 
     console.log(`Found ${newEvents.length} new events out of ${validEvents.length} total (${existingEvents?.length || 0} already exist)`);
