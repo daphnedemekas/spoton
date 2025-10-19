@@ -24,7 +24,7 @@ export const ScrapingStatusPanel = ({ sites, isVisible }: ScrapingStatusPanelPro
   const pendingCount = sites.filter(s => s.status === "pending").length;
 
   return (
-    <Card className="mb-6 border-border/50 bg-gradient-card shadow-card">
+    <Card className="mb-6 border-border/50 bg-card shadow-card">
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Scraped Sites ({sites.length})</span>

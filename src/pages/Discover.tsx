@@ -319,7 +319,7 @@ export default function Discover() {
               return (
                 <Card
                   key={event.id}
-                  className="group overflow-hidden border-border/50 bg-gradient-card shadow-card transition-all hover:shadow-hover hover:border-primary/20 cursor-pointer"
+                  className="group overflow-hidden border-border/50 bg-card shadow-card transition-all hover:shadow-hover hover:border-primary/30 cursor-pointer"
                   onClick={() => {
                     setSelectedEvent(event);
                     setIsDetailDialogOpen(true);
@@ -359,14 +359,14 @@ export default function Discover() {
                     <div className="mb-4 space-y-2">
                       <div className="flex flex-wrap gap-2">
                         {event.vibes.map((v) => (
-                          <Badge key={v} variant="secondary" className="text-xs bg-gradient-to-r from-accent/15 to-coral/15 border-accent/30 text-secondary-foreground">
+                          <Badge key={v} variant="secondary" className="text-xs">
                             {v}
                           </Badge>
                         ))}
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {event.interests.map((i) => (
-                          <Badge key={i} variant="outline" className="text-xs border-coral/40 text-coral bg-coral/5">
+                          <Badge key={i} variant="outline" className="text-xs">
                             {i}
                           </Badge>
                         ))}
