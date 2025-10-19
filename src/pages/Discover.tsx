@@ -22,7 +22,7 @@ type Event = {
   event_link?: string;
 };
 
-type AttendanceStatus = "suggested" | "saved" | "attended" | null;
+type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
 
 export default function Discover() {
   const navigate = useNavigate();
@@ -100,7 +100,7 @@ export default function Discover() {
         .upsert({
           user_id: currentUserId,
           event_id: event.id,
-          status: "saved",
+          status: "will_attend", // Changed from "saved" to match DB constraint
         });
 
       if (error) throw error;
@@ -113,7 +113,7 @@ export default function Discover() {
         interaction_type: "saved",
       });
 
-      setAttendanceMap((prev) => ({ ...prev, [event.id]: "saved" }));
+      setAttendanceMap((prev) => ({ ...prev, [event.id]: "will_attend" }));
       toast({ title: "Event saved!" });
     } catch (error: any) {
       toast({
@@ -382,13 +382,13 @@ export default function Discover() {
                     {/* Action Buttons */}
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
-                        variant={status === "saved" ? "default" : "outline"}
+                        variant={status === "will_attend" ? "default" : "outline"}
                         size="icon"
                         onClick={() => handleSaveEvent(event)}
-                        disabled={status === "saved"}
+                        disabled={status === "will_attend"}
                         className="flex-1"
                       >
-                        <Heart className={`h-4 w-4 ${status === "saved" ? "fill-current" : ""}`} />
+                        <Heart className={`h-4 w-4 ${status === "will_attend" ? "fill-current" : ""}`} />
                       </Button>
                       <Button
                         variant="outline"
