@@ -402,13 +402,14 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
             role: 'system',
             content: `You are an event extraction and ranking assistant. Parse HTML from various event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
 
+**CRITICAL LOCATION FILTER: ONLY extract events that are physically located in ${city} OR are explicitly online/virtual events. DO NOT include events from other cities like London, Oxford, Cambridge, etc.**
+
 SCORING CRITERIA (total 100 points):
-- Interest Match (25 points): How many user interests align with the event
-- Vibe Match (20 points): How well the event atmosphere matches user vibes
-- Location Match (25 points): Events in ${city} get full points, nearby cities get partial, virtual/online get 0
-- In-Person Bonus (15 points): In-person events get full points, virtual/online get 0
-- Interaction History (10 points): Boost similar to saved events, downrank similar to removed events
-- Date Proximity (5 points): Events sooner get higher scores
+- Interest Match (30 points): How many user interests align with the event
+- Vibe Match (25 points): How well the event atmosphere matches user vibes
+- In-Person Bonus (20 points): In-person events in ${city} get full points, online events get 10 points
+- Interaction History (15 points): Boost similar to saved events, downrank similar to removed events
+- Date Proximity (10 points): Events sooner get higher scores
 
 Return events sorted by score (highest first).`
           },
@@ -433,18 +434,19 @@ REQUIREMENTS:
 1. Extract SPECIFIC event page URLs from the HTML (not listing pages)
 2. Parse event titles, dates, descriptions, and locations from the HTML
 3. Identify if event is in-person or virtual/online - prefer in-person events
-4. Check if event location is in ${city} - prioritize local events
+4. **CRITICAL: ONLY include events that are EITHER in ${city} OR explicitly marked as "Online" or "Virtual". DO NOT include events from other cities.**
 5. Remove duplicate events (same URL or same title/venue/date)
 6. Only include events with specific dates in the next 7 days (starting from ${today})
 7. Format dates as YYYY-MM-DD
 8. Calculate relevance_score (0-100) for each event:
    - Give high scores to in-person events in ${city} that match user interests
-   - Give lower scores to virtual/online events or events outside ${city}
+   - Give lower scores to virtual/online events
    - Consider interaction history to boost/downrank events
 9. Sort events by relevance_score (highest first)
 10. Extract detailed descriptions (at least 2-3 sentences)
-11. Include specific venue names and addresses in location field
-12. Ensure each URL is a direct link to a specific event page, not a listing page
+11. For in-person events: Include specific venue names and addresses in location field. The location MUST be in ${city}.
+12. For online/virtual events: Set location to exactly "Online"
+13. Ensure each URL is a direct link to a specific event page, not a listing page
 
 CRITICAL DATE PARSING RULES:
 - Today's date is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})
