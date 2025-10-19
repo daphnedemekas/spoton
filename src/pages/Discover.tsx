@@ -40,7 +40,6 @@ export default function Discover() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [scrapedSites, setScrapedSites] = useState<any[]>([]);
   const [showScrapingPanel, setShowScrapingPanel] = useState(false);
-  const [removedTitles, setRemovedTitles] = useState<Set<string>>(new Set());
   
   const currentIndexRef = useRef(currentIndex);
 
@@ -72,29 +71,13 @@ export default function Discover() {
         setUserCity(profile.city);
       }
 
-      // Get removed events for this user
-      const { data: removedInteractions } = await supabase
-        .from("event_interactions")
-        .select("event_title")
-        .eq("user_id", user.id)
-        .eq("interaction_type", "removed");
-
-      const removedSet = new Set(
-        (removedInteractions || []).map(r => r.event_title.toLowerCase().trim())
-      );
-      setRemovedTitles(removedSet);
-
-      // Load events and filter out removed ones
       const { data: eventsData } = await supabase
         .from("events")
         .select("*")
         .order("date", { ascending: true });
 
       if (eventsData) {
-        const filteredEvents = eventsData.filter(event => 
-          !removedSet.has(event.title.toLowerCase().trim())
-        );
-        setAllEvents(filteredEvents);
+        setAllEvents(eventsData);
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -159,7 +142,6 @@ export default function Discover() {
         interaction_type: "removed",
       });
 
-      setRemovedTitles(prev => new Set([...prev, event.title.toLowerCase().trim()]));
       toast({ title: "Event removed" });
     } catch (error: any) {
       toast({
