@@ -48,8 +48,20 @@ serve(async (req) => {
       throw new Error('User profile not found');
     }
 
-    // Shuffle interests and vibes for variety in prompts
-    const shuffledInterests = interests.map(i => i.interest).sort(() => Math.random() - 0.5);
+    // Prioritize wellness interests (always include yoga, meditation, etc.)
+    const allInterests = interests.map(i => i.interest);
+    const wellnessInterests = allInterests.filter(i => 
+      ['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
+    );
+    const otherInterests = allInterests.filter(i => 
+      !['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
+    );
+    
+    // Shuffle only the non-wellness interests for variety
+    const shuffledOthers = otherInterests.sort(() => Math.random() - 0.5);
+    
+    // Combine: wellness interests first, then shuffled others
+    const shuffledInterests = [...wellnessInterests, ...shuffledOthers];
     const shuffledVibes = vibes.map(v => v.vibe).sort(() => Math.random() - 0.5);
     
     const userInterests = shuffledInterests.join(', ');
@@ -120,7 +132,7 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences. Focus on variety and lesser-known local venues.`
+              content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences. Focus on variety and lesser-known local venues. IMPORTANT: Always include specific venues for wellness activities like yoga studios, meditation centers, sound healing spaces, and fitness studios when those interests are mentioned.`
             },
             {
               role: 'user',
@@ -208,8 +220,16 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     if (BRAVE_API_KEY) {
       console.log('Using Brave Search to find event sites...');
       
-      // Randomize which interests to search for variety
-      const searchInterests = shuffledInterests.slice(0, 5);
+      // Always search for wellness interests first, then add random others
+      const priorityInterests = shuffledInterests.filter(i => 
+        ['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
+      );
+      const otherSearchInterests = shuffledInterests.filter(i => 
+        !['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
+      ).slice(0, 3);
+      
+      const searchInterests = [...priorityInterests, ...otherSearchInterests].slice(0, 8);
+      console.log('Searching Brave for interests:', searchInterests.join(', '));
       
       for (const interest of searchInterests) {
         try {
