@@ -271,8 +271,8 @@ export default function Discover() {
                   }}
                 >
                   <div className="p-6">
-                    {event.image_url && (
-                      <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-muted">
+                    <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-gradient-to-br from-primary/10 to-secondary/10">
+                      {event.image_url ? (
                         <img
                           src={event.image_url}
                           alt={event.title}
@@ -281,8 +281,12 @@ export default function Discover() {
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                      </div>
-                    )}
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center">
+                          <Sparkles className="h-12 w-12 text-primary/40" />
+                        </div>
+                      )}
+                    </div>
                     <div className="mb-4">
                       <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
                         {event.title}

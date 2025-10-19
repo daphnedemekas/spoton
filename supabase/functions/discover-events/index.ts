@@ -78,19 +78,15 @@ Search for events matching these interests: ${userInterests}
 And these vibes: ${userVibes}
 
 IMPORTANT INSTRUCTIONS:
-1. Search for REAL events from platforms like:
-   - Eventbrite
-   - Meetup.com
-   - Facebook Events
-   - Local venue websites
-   - City event calendars
+1. Find REAL events from platforms like Eventbrite, Meetup.com, Facebook Events, local venue websites, and city event calendars
 
 2. For EACH event you must provide:
    - A valid event_link (URL to the actual event page)
-   - Set image_url to null if you can't find a real image URL
+   - Set image_url to null (we'll use placeholder images)
    - All other required fields
 
 3. Only include events with valid event_link URLs
+4. DO NOT make up fake image URLs - always set image_url to null
 
 Return the events using the return_events function with all required fields populated.`
           }
