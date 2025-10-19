@@ -23,14 +23,14 @@ interface SwipeableEventCardProps {
 
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
   ({ event, onOpenDetails }, ref) => {
-    const handleMoreInfo = (e: React.MouseEvent) => {
+    const handleMoreInfo = (e: React.MouseEvent | React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
       console.log('More info clicked for:', event.title);
       onOpenDetails();
     };
 
-    const handleEventLink = (e: React.MouseEvent) => {
+    const handleEventLink = (e: React.MouseEvent | React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
       console.log('Event link clicked:', event.event_link);
@@ -98,9 +98,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
               <Button
                 variant="outline"
                 size="sm"
-                onMouseDown={(e) => e.stopPropagation()}
-                onTouchStart={(e) => e.stopPropagation()}
-                onClick={handleMoreInfo}
+                onPointerDown={handleMoreInfo}
                 className="flex-1 gap-2"
               >
                 <Info className="h-4 w-4" />
@@ -110,9 +108,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 <Button
                   variant="outline"
                   size="sm"
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onTouchStart={(e) => e.stopPropagation()}
-                  onClick={handleEventLink}
+                  onPointerDown={handleEventLink}
                   className="flex-1 gap-2"
                 >
                   <ExternalLink className="h-4 w-4" />
