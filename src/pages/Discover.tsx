@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
-import { Settings, Calendar, MapPin, Sparkles, User, Check, Search, Bookmark, CheckCircle } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Event = {
@@ -90,52 +90,60 @@ export default function Discover() {
     navigate("/auth");
   };
 
-  const handleSaveToggle = async (event: Event) => {
+  const handleSaveEvent = async (event: Event) => {
     try {
-      const currentStatus = attendanceMap[event.id];
-      const isSaved = currentStatus === "saved";
-
-      if (isSaved) {
-        // Remove saved status
-        await supabase
-          .from("event_attendance")
-          .delete()
-          .eq("user_id", currentUserId)
-          .eq("event_id", event.id);
-
-        // Track removal
-        await supabase.from("event_interactions").insert({
+      const { error } = await supabase
+        .from("event_attendance")
+        .upsert({
           user_id: currentUserId,
-          event_title: event.title,
-          event_description: event.description,
-          interaction_type: "removed",
+          event_id: event.id,
+          status: "saved",
         });
 
-        setAttendanceMap((prev) => ({ ...prev, [event.id]: null }));
-        toast({ title: "Removed from saved" });
-      } else {
-        // Save event
-        const { error } = await supabase
-          .from("event_attendance")
-          .upsert({
-            user_id: currentUserId,
-            event_id: event.id,
-            status: "saved",
-          });
+      if (error) throw error;
 
-        if (error) throw error;
+      // Track save
+      await supabase.from("event_interactions").insert({
+        user_id: currentUserId,
+        event_title: event.title,
+        event_description: event.description,
+        interaction_type: "saved",
+      });
 
-        // Track save
-        await supabase.from("event_interactions").insert({
-          user_id: currentUserId,
-          event_title: event.title,
-          event_description: event.description,
-          interaction_type: "saved",
-        });
+      setAttendanceMap((prev) => ({ ...prev, [event.id]: "saved" }));
+      toast({ title: "Event saved!" });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
 
-        setAttendanceMap((prev) => ({ ...prev, [event.id]: "saved" }));
-        toast({ title: "Event saved!" });
-      }
+  const handleRemoveEvent = async (event: Event) => {
+    try {
+      // Remove from attendance
+      await supabase
+        .from("event_attendance")
+        .delete()
+        .eq("user_id", currentUserId)
+        .eq("event_id", event.id);
+
+      // Track removal
+      await supabase.from("event_interactions").insert({
+        user_id: currentUserId,
+        event_title: event.title,
+        event_description: event.description,
+        interaction_type: "removed",
+      });
+
+      setAttendanceMap((prev) => ({ ...prev, [event.id]: null }));
+      
+      // Remove from display
+      setEvents((prev) => prev.filter((e) => e.id !== event.id));
+      
+      toast({ title: "Event removed" });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -353,23 +361,35 @@ export default function Discover() {
                       </div>
                     </div>
 
-                    {/* Save/Remove Button */}
-                    <div onClick={(e) => e.stopPropagation()}>
+                    {/* Action Buttons */}
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant={status === "saved" ? "default" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleSaveToggle(event)}
+                        size="icon"
+                        onClick={() => handleSaveEvent(event)}
+                        disabled={status === "saved"}
+                        className="flex-1"
                       >
-                        {status === "saved" ? (
-                          <>
-                            <Check className="mr-1 h-4 w-4" />
-                            Remove
-                          </>
-                        ) : (
-                          "Save"
-                        )}
+                        <Heart className={`h-4 w-4 ${status === "saved" ? "fill-current" : ""}`} />
                       </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => handleRemoveEvent(event)}
+                        className="flex-1"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                      {event.event_link && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          onClick={() => window.open(event.event_link, '_blank')}
+                          className="flex-1"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </Card>

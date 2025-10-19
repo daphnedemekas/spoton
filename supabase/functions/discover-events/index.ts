@@ -221,7 +221,15 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction assistant. Parse HTML from event platforms (Eventbrite, Meetup, Ticketmaster, Eventful) and extract REAL upcoming events with EXACT event page URLs. Only return events with complete information.`
+            content: `You are an event extraction and ranking assistant. Parse HTML from event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
+
+SCORING CRITERIA:
+- Interest Match (40 points): How many user interests align with the event
+- Vibe Match (30 points): How well the event atmosphere matches user vibes
+- Interaction History (20 points): Boost similar to saved events, downrank similar to removed events
+- Date Proximity (10 points): Events sooner get higher scores
+
+Return events sorted by score (highest first).`
           },
           {
             role: 'user',
@@ -246,8 +254,8 @@ REQUIREMENTS:
 3. Remove duplicate events (same URL or same title/venue/date)
 4. Only include events with specific dates between ${today} and ${nextWeek}
 5. Format dates as YYYY-MM-DD
-6. Match events to user interests: ${userInterests}
-7. Match events to user vibes: ${userVibes}
+6. Calculate relevance_score (0-100) for each event based on user preferences and interaction history
+7. Sort events by relevance_score (highest first)
 8. Extract detailed descriptions (at least 2-3 sentences)
 9. Include specific venue names and addresses in location field
 10. Ensure each URL is a direct link to a specific event page, not a listing page
@@ -275,9 +283,10 @@ Return events using the return_events function.`
                         location: { type: "string" },
                         event_link: { type: "string" },
                         interests: { type: "array", items: { type: "string" } },
-                        vibes: { type: "array", items: { type: "string" } }
+                        vibes: { type: "array", items: { type: "string" } },
+                        relevance_score: { type: "number", description: "Score from 0-100 based on user preference match" }
                       },
-                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes"],
+                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes", "relevance_score"],
                       additionalProperties: false
                     }
                   }
