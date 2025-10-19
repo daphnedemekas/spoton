@@ -153,6 +153,36 @@ export default function Discover() {
     }
   };
 
+  const getColorSuggestions = async () => {
+    try {
+      toast({
+        title: "Asking Gemini...",
+        description: "Getting color scheme suggestions",
+      });
+
+      const { data, error } = await supabase.functions.invoke("suggest-colors", {
+        body: { preferences: "muted, professional, and easy on the eyes" },
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Color Suggestions from Gemini",
+        description: data.suggestion,
+        duration: 15000,
+      });
+
+      console.log("Gemini color suggestions:", data.suggestion);
+    } catch (error) {
+      console.error("Error getting color suggestions:", error);
+      toast({
+        title: "Error",
+        description: "Failed to get color suggestions",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredEvents = events.filter((event) => {
     const eventDate = new Date(event.date);
     const today = new Date();
@@ -246,8 +276,13 @@ export default function Discover() {
               <MapPin className="h-4 w-4" />
               <span className="text-sm">{userCity}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <h1 className="text-4xl font-bold">Discover Events</h1>
+              <div className="flex gap-2">
+                <Button onClick={getColorSuggestions} variant="outline" size="sm">
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Get Color Suggestions
+                </Button>
               <Button
                 onClick={async () => {
                   setLoading(true);
@@ -279,6 +314,7 @@ export default function Discover() {
                 <Sparkles className="h-4 w-4" />
                 Discover New Events
               </Button>
+              </div>
             </div>
             <div className="mt-6 flex gap-3">
               <Button
