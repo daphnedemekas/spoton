@@ -243,40 +243,47 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       
       for (const interest of searchInterests) {
         try {
-          // Vary search query style for different results
+          // Do 2 different searches per interest for more variety
           const queryStyles = [
             `${interest} events ${city} site:*.com OR site:*.org`,
             `upcoming ${interest} ${city} calendar`,
             `${interest} activities near ${city}`,
             `${city} ${interest} schedule`
           ];
-          const searchQuery = queryStyles[Math.floor(Math.random() * queryStyles.length)];
           
-          const braveResponse = await fetch(
-            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
-            {
-              headers: {
-                'Accept': 'application/json',
-                'X-Subscription-Token': BRAVE_API_KEY
+          // Pick 2 different query styles for each interest
+          const queries = [
+            queryStyles[Math.floor(Math.random() * queryStyles.length)],
+            queryStyles[Math.floor(Math.random() * queryStyles.length)]
+          ];
+          
+          for (const searchQuery of queries) {
+            const braveResponse = await fetch(
+              `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=5`,
+              {
+                headers: {
+                  'Accept': 'application/json',
+                  'X-Subscription-Token': BRAVE_API_KEY
+                }
               }
-            }
-          );
+            );
 
-          if (braveResponse.ok) {
-            const braveData = await braveResponse.json();
-            const results = braveData.web?.results || [];
-            
-            for (const result of results) {
-              // Filter for actual event listing pages
-              if (result.url && !result.url.includes('facebook.com') && !result.url.includes('twitter.com')) {
-                braveWebsites.push({
-                  url: result.url,
-                  source: `Brave: ${result.title?.substring(0, 30) || 'Event Site'}`,
-                  interest: interest
-                });
+            if (braveResponse.ok) {
+              const braveData = await braveResponse.json();
+              const results = braveData.web?.results || [];
+              
+              for (const result of results) {
+                // Filter for actual event listing pages
+                if (result.url && !result.url.includes('facebook.com') && !result.url.includes('twitter.com')) {
+                  braveWebsites.push({
+                    url: result.url,
+                    source: `Brave: ${result.title?.substring(0, 30) || 'Event Site'}`,
+                    interest: interest
+                  });
+                }
               }
+              console.log(`Brave found ${results.length} sites for "${interest}" with query: ${searchQuery}`);
             }
-            console.log(`Brave found ${results.length} sites for ${interest}`);
           }
         } catch (error) {
           console.log(`Brave search failed for ${interest}:`, error);
@@ -292,11 +299,16 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       ...braveWebsites
     ];
     
-    // Shuffle the websites to get different ones each time
-    const shuffled = allAvailableWebsites.sort(() => Math.random() - 0.5);
-    const allWebsites = shuffled.slice(0, 20); // Take random 20
+    // Remove duplicates by URL
+    const uniqueWebsites = Array.from(
+      new Map(allAvailableWebsites.map(w => [w.url, w])).values()
+    );
     
-    console.log(`Selected ${allWebsites.length} random websites from ${allAvailableWebsites.length} available`);
+    // Shuffle and take up to 30 websites (more coverage per interest)
+    const shuffled = uniqueWebsites.sort(() => Math.random() - 0.5);
+    const allWebsites = shuffled.slice(0, 30);
+    
+    console.log(`Selected ${allWebsites.length} random websites from ${uniqueWebsites.length} unique sites (${allAvailableWebsites.length} total with duplicates)`);
 
     // Step 2: Scrape websites in parallel with concurrency limit
     console.log(`Scraping ${allWebsites.length} websites with parallel processing...`);
