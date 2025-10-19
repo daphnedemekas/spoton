@@ -185,7 +185,20 @@ Return ONLY valid events that have both event_link AND image_url populated with 
       throw new Error('No valid events found with required URLs');
     }
 
-    // Insert events into database
+    // Clear all old events first
+    const { error: deleteError } = await supabaseClient
+      .from('events')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+
+    if (deleteError) {
+      console.error('Error deleting old events:', deleteError);
+      // Continue anyway - we still want to insert new events
+    } else {
+      console.log('Successfully cleared old events');
+    }
+
+    // Insert new events into database
     const eventsToInsert = validEvents.map((event: any) => ({
       title: event.title,
       description: event.description,
