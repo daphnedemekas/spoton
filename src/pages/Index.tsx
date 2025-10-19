@@ -71,7 +71,7 @@ export default function Index() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="mb-4 inline-flex items-center justify-center rounded-3xl bg-gradient-primary p-4 shadow-glow">
-            <MapPin className="h-16 w-16 text-primary-foreground" />
+            <MapPin className="h-16 w-16 text-card" />
           </div>
           
           <h1 className="text-5xl font-bold">
