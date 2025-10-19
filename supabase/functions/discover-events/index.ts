@@ -220,16 +220,9 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     if (BRAVE_API_KEY) {
       console.log('Using Brave Search to find event sites...');
       
-      // Always search for wellness interests first, then add random others
-      const priorityInterests = shuffledInterests.filter(i => 
-        ['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
-      );
-      const otherSearchInterests = shuffledInterests.filter(i => 
-        !['Yoga', 'Meditation', 'Sound Baths', 'Breathwork', 'Fitness Classes'].includes(i)
-      ).slice(0, 3);
-      
-      const searchInterests = [...priorityInterests, ...otherSearchInterests].slice(0, 8);
-      console.log('Searching Brave for interests:', searchInterests.join(', '));
+      // Search for ALL user interests
+      const searchInterests = shuffledInterests;
+      console.log('Searching Brave for all interests:', searchInterests.join(', '));
       
       for (const interest of searchInterests) {
         try {
