@@ -1,11 +1,17 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Sparkles, Calendar, MapPin, Heart } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { MapPin } from "lucide-react";
+import { toast } from "sonner";
 
 export default function Index() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [isLogin, setIsLogin] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     checkAuth();
@@ -28,64 +34,91 @@ export default function Index() {
     }
   };
 
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      if (isLogin) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) throw error;
+        toast.success("Welcome back!");
+      } else {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        });
+
+        if (error) throw error;
+        toast.success("Account created! Please check your email.");
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-subtle">
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
-        <div className="mx-auto max-w-4xl text-center">
-          <div className="mb-6 inline-flex items-center justify-center rounded-3xl bg-gradient-primary p-4 shadow-glow">
-            <Sparkles className="h-16 w-16 text-primary-foreground" />
+    <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4">
+      <div className="w-full max-w-md">
+        <div className="text-center mb-8">
+          <div className="mb-4 inline-flex items-center justify-center rounded-3xl bg-gradient-primary p-4 shadow-glow">
+            <MapPin className="h-16 w-16 text-primary-foreground" />
           </div>
           
-          <h1 className="mb-6 text-5xl font-bold leading-tight md:text-7xl">
+          <h1 className="text-5xl font-bold">
             <span className="bg-gradient-primary bg-clip-text text-transparent">
               SpotOn
             </span>
           </h1>
-          
-          <p className="mb-8 text-xl text-muted-foreground md:text-2xl">
-            Discover events that match your interests and energy
-          </p>
-
-          <Button
-            onClick={() => navigate("/auth")}
-            size="lg"
-            className="h-14 px-8 text-lg bg-gradient-primary text-primary-foreground shadow-glow transition-all hover:scale-105"
-          >
-            Get Started
-          </Button>
         </div>
 
-        {/* Features */}
-        <div className="mx-auto mt-24 grid max-w-5xl gap-8 md:grid-cols-3">
-          <div className="rounded-2xl bg-card p-8 text-center shadow-card transition-all hover:scale-105">
-            <div className="mb-4 inline-flex items-center justify-center rounded-2xl bg-gradient-accent p-4">
-              <Calendar className="h-8 w-8 text-accent-foreground" />
+        <div className="rounded-2xl bg-card p-8 shadow-card">
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <Input
+                type="email"
+                placeholder="Email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full"
+              />
             </div>
-            <h3 className="mb-2 text-xl font-semibold">Personalized Events</h3>
-            <p className="text-muted-foreground">
-              Get recommendations based on your unique interests and vibes
-            </p>
-          </div>
+            <div>
+              <Input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full"
+              />
+            </div>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-gradient-primary text-primary-foreground"
+            >
+              {loading ? "Loading..." : isLogin ? "Sign In" : "Sign Up"}
+            </Button>
+          </form>
 
-          <div className="rounded-2xl bg-card p-8 text-center shadow-card transition-all hover:scale-105">
-            <div className="mb-4 inline-flex items-center justify-center rounded-2xl bg-gradient-primary p-4">
-              <MapPin className="h-8 w-8 text-primary-foreground" />
-            </div>
-            <h3 className="mb-2 text-xl font-semibold">Local Discoveries</h3>
-            <p className="text-muted-foreground">
-              Find amazing happenings right in your neighborhood
-            </p>
-          </div>
-
-          <div className="rounded-2xl bg-card p-8 text-center shadow-card transition-all hover:scale-105">
-            <div className="mb-4 inline-flex items-center justify-center rounded-2xl bg-gradient-accent p-4">
-              <Heart className="h-8 w-8 text-accent-foreground" />
-            </div>
-            <h3 className="mb-2 text-xl font-semibold">Email Updates</h3>
-            <p className="text-muted-foreground">
-              Stay in the loop with customizable email notifications
-            </p>
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => setIsLogin(!isLogin)}
+              className="text-sm text-muted-foreground hover:text-primary"
+            >
+              {isLogin ? "Need an account? Sign up" : "Already have an account? Sign in"}
+            </button>
           </div>
         </div>
       </div>
