@@ -82,37 +82,55 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Build search query
-    const searchQuery = `events in ${city} ${userInterests.split(',').slice(0, 3).join(' ')} ${today}`;
-    console.log('Brave search query:', searchQuery);
+    // Step 1: Perform multiple targeted Brave searches
+    const interestsList = interests.slice(0, 4).map(i => i.interest); // Top 4 interests
+    const vibesList = vibes.slice(0, 3).map(v => v.vibe); // Top 3 vibes
+    
+    console.log(`Performing ${interestsList.length * vibesList.length} targeted searches`);
+    
+    const allSearchResults: any[] = [];
+    
+    // Search for each interest + vibe combination
+    for (const interest of interestsList) {
+      for (const vibe of vibesList) {
+        const searchQuery = `${interest} ${vibe} events in ${city} ${today}`;
+        console.log('Brave search:', searchQuery);
 
-    // Step 1: Search the web with Brave
-    const braveResponse = await fetch(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=20`, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip',
-        'X-Subscription-Token': BRAVE_API_KEY,
-      },
-    });
+        try {
+          const braveResponse = await fetch(
+            `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
+            {
+              method: 'GET',
+              headers: {
+                'Accept': 'application/json',
+                'Accept-Encoding': 'gzip',
+                'X-Subscription-Token': BRAVE_API_KEY,
+              },
+            }
+          );
 
-    if (!braveResponse.ok) {
-      const errorText = await braveResponse.text();
-      console.error('Brave Search API error:', braveResponse.status, errorText);
-      throw new Error('Failed to search for events with Brave');
+          if (braveResponse.ok) {
+            const braveData = await braveResponse.json();
+            const results = braveData.web?.results?.slice(0, 5).map((result: any) => ({
+              title: result.title,
+              description: result.description,
+              url: result.url,
+              searchContext: { interest, vibe }
+            })) || [];
+            
+            allSearchResults.push(...results);
+            console.log(`Found ${results.length} results for ${interest} + ${vibe}`);
+          }
+        } catch (error) {
+          console.error(`Search failed for ${interest} + ${vibe}:`, error);
+          // Continue with other searches
+        }
+      }
     }
 
-    const braveData = await braveResponse.json();
-    console.log('Brave search returned', braveData.web?.results?.length || 0, 'results');
+    console.log(`Total search results collected: ${allSearchResults.length}`);
 
-    // Extract search results
-    const searchResults = braveData.web?.results?.slice(0, 15).map((result: any) => ({
-      title: result.title,
-      description: result.description,
-      url: result.url,
-    })) || [];
-
-    if (searchResults.length === 0) {
+    if (allSearchResults.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -135,17 +153,18 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event extraction assistant. Analyze web search results and extract REAL events with accurate information. Only include events that have clear dates, locations, and valid event page URLs.`
+            content: `You are an event extraction assistant. Analyze web search results and extract REAL events with accurate information. Only include events that have clear dates, locations, and valid event page URLs. Remove duplicates.`
           },
           {
             role: 'user',
             content: `Here are web search results for events in ${city}:
 
-${searchResults.map((r: any, i: number) => `[${i + 1}] ${r.title}
+${allSearchResults.map((r: any, i: number) => `[${i + 1}] ${r.title}
 URL: ${r.url}
+Context: ${r.searchContext.interest} / ${r.searchContext.vibe}
 ${r.description}`).join('\n\n')}
 
-Extract 8-10 upcoming events happening between ${today} and ${nextWeek}.
+Extract 8-12 unique upcoming events happening between ${today} and ${nextWeek}.
 
 User preferences:
 - Interests: ${userInterests}
@@ -154,12 +173,13 @@ ${interactionContext}
 
 REQUIREMENTS:
 1. Use the ACTUAL URLs from the search results above
-2. Only include events with specific dates between ${today} and ${nextWeek}
-3. Format dates as YYYY-MM-DD
-4. Match events to user interests and vibes
-5. Verify each URL is an actual event page (not just a venue homepage)
-6. If a result doesn't have enough info to be a complete event, skip it
-7. Prioritize events from Eventbrite, Meetup, Facebook Events, and venue sites
+2. Remove duplicate events (same URL or same title/venue/date)
+3. Only include events with specific dates between ${today} and ${nextWeek}
+4. Format dates as YYYY-MM-DD
+5. Match events to the most relevant interests and vibes from the search context
+6. Verify each URL is an actual event page (not just a venue homepage)
+7. If a result doesn't have enough info to be a complete event, skip it
+8. Prioritize events from Eventbrite, Meetup, Facebook Events, Ticketmaster, and official venue sites
 
 Return events using the return_events function.`
           }
