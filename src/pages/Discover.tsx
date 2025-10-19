@@ -153,7 +153,7 @@ export default function Discover() {
   };
 
   const filteredEvents = useMemo(() => {
-    return allEvents.filter((event) => {
+    const filtered = allEvents.filter((event) => {
       const eventDate = new Date(event.date);
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -166,20 +166,25 @@ export default function Discover() {
         return eventDate >= today && eventDate <= weekFromNow;
       }
     });
+    console.log('Filtered events:', filtered.length);
+    return filtered;
   }, [allEvents, timeFilter]);
 
   // Initialize displayed events when filtered events change
   useEffect(() => {
     if (filteredEvents.length > 0) {
       const initialBatch = filteredEvents.slice(0, BATCH_SIZE);
+      console.log('Setting initial batch:', initialBatch.length);
       setDisplayedEvents(initialBatch);
       setCurrentIndex(0);
+    } else {
+      setDisplayedEvents([]);
     }
   }, [filteredEvents]);
 
   // Load more events as user swipes
   useEffect(() => {
-    if (allEvents.length === 0) return;
+    if (filteredEvents.length === 0) return;
     
     const remaining = filteredEvents.length - currentIndex;
     if (remaining < 5 && displayedEvents.length < filteredEvents.length) {
@@ -187,12 +192,15 @@ export default function Discover() {
         displayedEvents.length,
         displayedEvents.length + BATCH_SIZE
       );
+      console.log('Loading next batch:', nextBatch.length);
       setDisplayedEvents(prev => [...prev, ...nextBatch]);
     }
-  }, [displayedEvents, currentIndex, filteredEvents, allEvents]);
+  }, [currentIndex, filteredEvents, displayedEvents.length]);
 
   const visibleCards = useMemo(() => {
-    return displayedEvents.slice(currentIndex, currentIndex + 3);
+    const cards = displayedEvents.slice(currentIndex, currentIndex + 3);
+    console.log('Visible cards:', cards.length, 'at index', currentIndex);
+    return cards;
   }, [displayedEvents, currentIndex]);
 
   if (loading) {
@@ -327,26 +335,32 @@ export default function Discover() {
 
           {/* Swipe Cards */}
           <div className="relative mx-auto max-w-md">
-            <div className="relative h-[600px] w-full">
+            <div className="relative h-[620px] w-full">
               {visibleCards.length > 0 ? (
-                visibleCards.map((event, index) => (
-                  <TinderCard
-                    key={event.id}
-                    onSwipe={(dir) => handleSwipe(dir, event)}
-                    preventSwipe={["up", "down"]}
-                    className="absolute inset-0"
-                    swipeRequirementType="position"
-                    swipeThreshold={100}
-                  >
-                    <SwipeableEventCard
-                      event={event}
-                      onOpenDetails={() => {
-                        setSelectedEvent(event);
-                        setIsDetailDialogOpen(true);
+                <>
+                  {visibleCards.map((event, index) => (
+                    <TinderCard
+                      key={event.id}
+                      onSwipe={(dir) => {
+                        console.log('Swiped', dir, event.title);
+                        handleSwipe(dir, event);
                       }}
-                    />
-                  </TinderCard>
-                ))
+                      preventSwipe={["up", "down"]}
+                      className="absolute inset-0"
+                      swipeRequirementType="position"
+                      swipeThreshold={100}
+                    >
+                      <SwipeableEventCard
+                        event={event}
+                        onOpenDetails={() => {
+                          console.log('Opening details for:', event.title);
+                          setSelectedEvent(event);
+                          setIsDetailDialogOpen(true);
+                        }}
+                      />
+                    </TinderCard>
+                  ))}
+                </>
               ) : (
                 <div className="flex h-full items-center justify-center">
                   <div className="text-center">

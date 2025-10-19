@@ -23,12 +23,28 @@ interface SwipeableEventCardProps {
 
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
   ({ event, onOpenDetails }, ref) => {
+    const handleMoreInfo = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      console.log('More info clicked for:', event.title);
+      onOpenDetails();
+    };
+
+    const handleEventLink = (e: React.MouseEvent) => {
+      e.stopPropagation();
+      e.preventDefault();
+      console.log('Event link clicked:', event.event_link);
+      if (event.event_link) {
+        window.open(event.event_link, '_blank', 'noopener,noreferrer');
+      }
+    };
+
     return (
-      <div ref={ref} className="absolute inset-0 cursor-grab active:cursor-grabbing">
-        <Card className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-lg">
+      <div ref={ref} className="absolute inset-0">
+        <Card className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-xl">
           <div className="h-full flex flex-col">
             {event.image_url && (
-              <div className="relative h-64 w-full overflow-hidden bg-muted flex-shrink-0">
+              <div className="relative h-48 w-full overflow-hidden bg-muted flex-shrink-0">
                 <img
                   src={event.image_url}
                   alt={event.title}
@@ -40,7 +56,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
               </div>
             )}
             
-            <div className="flex-1 overflow-y-auto p-6 pb-20">
+            <div className="flex-1 overflow-y-auto p-6 pb-24">
               <div className="mb-4">
                 <h2 className="mb-2 text-2xl font-bold">{event.title}</h2>
                 <p className="text-sm text-muted-foreground line-clamp-3">
@@ -77,39 +93,30 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
               </div>
             </div>
             
-            {/* Fixed button bar at bottom - outside swipe area */}
-            <div 
-              className="absolute bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border p-4 flex gap-2"
-              style={{ pointerEvents: 'auto' }}
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-            >
+            {/* Fixed button bar */}
+            <div className="absolute bottom-0 left-0 right-0 bg-card border-t border-border p-4 flex gap-2 z-50">
               <Button
                 variant="outline"
                 size="sm"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onOpenDetails();
-                }}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={handleMoreInfo}
                 className="flex-1 gap-2"
               >
                 <Info className="h-4 w-4" />
-                More Info
+                Info
               </Button>
               {event.event_link && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    e.preventDefault();
-                    window.open(event.event_link, '_blank');
-                  }}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={handleEventLink}
                   className="flex-1 gap-2"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Event Link
+                  Link
                 </Button>
               )}
             </div>
