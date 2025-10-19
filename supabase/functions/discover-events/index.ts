@@ -78,7 +78,7 @@ Search for events matching these interests: ${userInterests}
 And these vibes: ${userVibes}
 
 IMPORTANT INSTRUCTIONS:
-1. Search the web for REAL events from platforms like:
+1. Search for REAL events from platforms like:
    - Eventbrite
    - Meetup.com
    - Facebook Events
@@ -87,10 +87,10 @@ IMPORTANT INSTRUCTIONS:
 
 2. For EACH event you must provide:
    - A valid event_link (URL to the actual event page)
-   - A valid image_url (event poster or venue image)
+   - Set image_url to null if you can't find a real image URL
    - All other required fields
 
-3. If you can't find valid URLs for an event, DO NOT include it
+3. Only include events with valid event_link URLs
 
 Return the events using the return_events function with all required fields populated.`
           }
@@ -114,11 +114,11 @@ Return the events using the return_events function with all required fields popu
                         date: { type: "string" },
                         location: { type: "string" },
                         event_link: { type: "string" },
-                        image_url: { type: "string" },
+                        image_url: { type: "string", nullable: true },
                         interests: { type: "array", items: { type: "string" } },
                         vibes: { type: "array", items: { type: "string" } }
                       },
-                      required: ["title", "description", "date", "location", "event_link", "image_url", "interests", "vibes"],
+                      required: ["title", "description", "date", "location", "event_link", "interests", "vibes"],
                       additionalProperties: false
                     }
                   }
@@ -167,21 +167,30 @@ Return the events using the return_events function with all required fields popu
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events - only insert events with valid links and images
-    const validEvents = eventsData.events.filter((event: any) => {
-      const hasValidLink = event.event_link && 
-        typeof event.event_link === 'string' && 
-        event.event_link.startsWith('http');
-      const hasValidImage = event.image_url && 
-        typeof event.image_url === 'string' && 
-        event.image_url.startsWith('http');
-      
-      if (!hasValidLink || !hasValidImage) {
-        console.log(`Skipping event "${event.title}" - missing valid link or image`);
-        return false;
-      }
-      return true;
-    });
+    // Filter and validate events - only require valid event links
+    const validEvents = eventsData.events
+      .filter((event: any) => {
+        const hasValidLink = event.event_link && 
+          typeof event.event_link === 'string' && 
+          event.event_link.startsWith('http');
+        
+        if (!hasValidLink) {
+          console.log(`Skipping event "${event.title}" - missing valid event link`);
+          return false;
+        }
+        return true;
+      })
+      .map((event: any) => {
+        // Set image_url to null if it's not a valid URL
+        const hasValidImage = event.image_url && 
+          typeof event.image_url === 'string' && 
+          event.image_url.startsWith('http');
+        
+        return {
+          ...event,
+          image_url: hasValidImage ? event.image_url : null
+        };
+      });
 
     if (validEvents.length === 0) {
       return new Response(
