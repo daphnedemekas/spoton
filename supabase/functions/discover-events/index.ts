@@ -68,27 +68,34 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with valid URLs and images. Return events in the specified JSON format using the return_events function.`
+            content: `You are an event discovery assistant with web search capabilities. Your job is to find REAL upcoming events by searching the web and extracting actual event details including REAL image URLs from the event pages you find. You must use your web search to find events and extract their actual data.`
           },
           {
             role: 'user',
-            content: `Find 8-10 upcoming events in ${city} happening between ${today} and ${nextWeek}.
+            content: `Search the web and find 8-10 REAL upcoming events in ${city} happening between ${today} and ${nextWeek}.
 
-Search for events matching these interests: ${userInterests}
-And these vibes: ${userVibes}
+Target events matching these interests: ${userInterests}
+Target events matching these vibes: ${userVibes}
 
-IMPORTANT INSTRUCTIONS:
-1. Find REAL events from platforms like Eventbrite, Meetup.com, Facebook Events, local venue websites, and city event calendars
+CRITICAL INSTRUCTIONS:
+1. USE WEB SEARCH to find real events from:
+   - Eventbrite.com events
+   - Meetup.com events  
+   - Facebook Events
+   - Local venue websites (concert halls, theaters, etc.)
+   - City event calendars
 
-2. For EACH event you must provide:
-   - A valid event_link (URL to the actual event page)
-   - Set image_url to null (we'll use placeholder images)
-   - All other required fields
+2. For EACH event you find:
+   - Extract the ACTUAL event_link from the page
+   - Extract the ACTUAL image_url from the event page (look for og:image, event poster, venue photo)
+   - If you cannot find a real image URL on the event page, set image_url to null
+   - Extract all other event details (title, description, date, location, etc.)
 
-3. Only include events with valid event_link URLs
-4. DO NOT make up fake image URLs - always set image_url to null
+3. NEVER make up or generate fake URLs - only use actual URLs you find through web search
+4. Only return events that have valid event_link URLs
+5. Prefer events with real image URLs, but include events without images if they're good matches
 
-Return the events using the return_events function with all required fields populated.`
+Return the events using the return_events function.`
           }
         ],
         tools: [
