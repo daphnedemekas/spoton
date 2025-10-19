@@ -245,6 +245,33 @@ export type Database = {
           },
         ]
       }
+      website_suggestions: {
+        Row: {
+          city: string
+          created_at: string | null
+          id: string
+          interests: string[]
+          updated_at: string | null
+          websites: Json
+        }
+        Insert: {
+          city: string
+          created_at?: string | null
+          id?: string
+          interests: string[]
+          updated_at?: string | null
+          websites: Json
+        }
+        Update: {
+          city?: string
+          created_at?: string | null
+          id?: string
+          interests?: string[]
+          updated_at?: string | null
+          websites?: Json
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

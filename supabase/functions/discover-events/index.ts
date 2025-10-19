@@ -78,27 +78,48 @@ serve(async (req) => {
     const today = new Date().toISOString().split('T')[0];
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-    // Step 1: Ask Gemini for best websites to scrape based on interests
+    // Step 1: Check for cached website suggestions
     const interestsList = interests.map(i => i.interest); // All interests
     
-    console.log('Asking Gemini for website suggestions...');
+    console.log('Checking for cached website suggestions...');
     
-    const websiteSuggestionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences.`
-          },
-          {
-            role: 'user',
-            content: `City: ${city}
+    const { data: cachedSuggestions } = await supabaseClient
+      .from('website_suggestions')
+      .select('websites, created_at')
+      .eq('city', city)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let suggestedWebsites;
+
+    // Use cache if less than 7 days old, otherwise fetch new suggestions
+    const cacheMaxAge = 7 * 24 * 60 * 60 * 1000; // 7 days
+    const isCacheValid = cachedSuggestions && 
+      (new Date().getTime() - new Date(cachedSuggestions.created_at).getTime()) < cacheMaxAge;
+
+    if (isCacheValid) {
+      console.log('Using cached website suggestions');
+      suggestedWebsites = cachedSuggestions.websites;
+    } else {
+      console.log('Fetching new website suggestions from Gemini...');
+      
+      const websiteSuggestionResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences.`
+            },
+            {
+              role: 'user',
+              content: `City: ${city}
 Interests: ${interestsList.join(', ')}
 
 Suggest up to 50 specific URLs to scrape for these interests in ${city}. Think broadly - not just event platforms, but ANY website that would have relevant activities or opportunities:
@@ -115,56 +136,69 @@ EXAMPLES of what to include:
 - Workshop and class providers
 
 Return actual scrapable URLs that would list current/upcoming activities, not just homepages. Be specific and creative based on the user's interests.`
-          }
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "suggest_websites",
-              description: "Return website URLs to scrape",
-              parameters: {
-                type: "object",
-                properties: {
-                  websites: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        url: { type: "string" },
-                        source: { type: "string" },
-                        interest: { type: "string" }
-                      },
-                      required: ["url", "source", "interest"]
+            }
+          ],
+          tools: [
+            {
+              type: "function",
+              function: {
+                name: "suggest_websites",
+                description: "Return website URLs to scrape",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    websites: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          url: { type: "string" },
+                          source: { type: "string" },
+                          interest: { type: "string" }
+                        },
+                        required: ["url", "source", "interest"]
+                      }
                     }
-                  }
-                },
-                required: ["websites"]
+                  },
+                  required: ["websites"]
+                }
               }
             }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "suggest_websites" } }
-      }),
-    });
+          ],
+          tool_choice: { type: "function", function: { name: "suggest_websites" } }
+        }),
+      });
 
-    if (!websiteSuggestionResponse.ok) {
-      console.error('Failed to get website suggestions');
-      throw new Error('Failed to get website suggestions');
+      if (!websiteSuggestionResponse.ok) {
+        console.error('Failed to get website suggestions');
+        throw new Error('Failed to get website suggestions');
+      }
+
+      const websiteData = await websiteSuggestionResponse.json();
+      const websiteToolCall = websiteData.choices?.[0]?.message?.tool_calls?.[0];
+      
+      if (!websiteToolCall) {
+        throw new Error('No website suggestions returned');
+      }
+
+      suggestedWebsites = typeof websiteToolCall.function.arguments === 'string' 
+        ? JSON.parse(websiteToolCall.function.arguments)
+        : websiteToolCall.function.arguments;
+
+      console.log(`Gemini suggested ${suggestedWebsites.websites.length} websites to scrape`);
+
+      // Cache the suggestions
+      await supabaseClient
+        .from('website_suggestions')
+        .upsert({
+          city,
+          interests: interestsList,
+          websites: suggestedWebsites
+        });
+      
+      console.log('Cached website suggestions for future use');
     }
 
-    const websiteData = await websiteSuggestionResponse.json();
-    const websiteToolCall = websiteData.choices?.[0]?.message?.tool_calls?.[0];
-    
-    if (!websiteToolCall) {
-      throw new Error('No website suggestions returned');
-    }
-
-    const suggestedWebsites = typeof websiteToolCall.function.arguments === 'string' 
-      ? JSON.parse(websiteToolCall.function.arguments)
-      : websiteToolCall.function.arguments;
-
-    console.log(`Gemini suggested ${suggestedWebsites.websites.length} websites to scrape`);
 
     // Step 2: Scrape the suggested websites
     const allScrapedData: any[] = [];
