@@ -27,15 +27,34 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
     const [otherUsers, setOtherUsers] = useState<Array<{ profile_picture_url: string | null; first_name: string | null }>>([]);
 
     useEffect(() => {
-      const fetchOtherUsers = async () => {
+      const fetchConnectedUsers = async () => {
         const { data: currentUser } = await supabase.auth.getUser();
+        if (!currentUser?.user) return;
         
+        // Get accepted connections
+        const { data: connections } = await supabase
+          .from('user_connections')
+          .select('user_id, connected_user_id')
+          .eq('status', 'accepted')
+          .or(`user_id.eq.${currentUser.user.id},connected_user_id.eq.${currentUser.user.id}`);
+
+        if (!connections || connections.length === 0) {
+          setOtherUsers([]);
+          return;
+        }
+
+        // Get list of connected user IDs
+        const connectedUserIds = connections.map(c => 
+          c.user_id === currentUser.user.id ? c.connected_user_id : c.user_id
+        );
+
+        // Get connected users who saved this event
         const { data: attendees } = await supabase
           .from('event_attendance')
           .select('user_id, profiles(profile_picture_url, first_name)')
           .eq('event_id', event.id)
           .eq('status', 'saved')
-          .neq('user_id', currentUser?.user?.id || '')
+          .in('user_id', connectedUserIds)
           .limit(5);
 
         if (attendees) {
@@ -49,7 +68,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
         }
       };
 
-      fetchOtherUsers();
+      fetchConnectedUsers();
     }, [event.id]);
 
     const handleEventLink = (e: React.MouseEvent | React.PointerEvent) => {

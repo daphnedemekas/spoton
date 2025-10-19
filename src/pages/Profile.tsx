@@ -6,7 +6,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthGuard } from "@/components/AuthGuard";
-import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings, Users, UserPlus, UserCheck, UserX } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type Profile = {
   id: string;
@@ -34,6 +35,7 @@ type AttendanceWithEvent = {
 export default function Profile() {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [willAttendEvents, setWillAttendEvents] = useState<Event[]>([]);
@@ -41,6 +43,9 @@ export default function Profile() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [interests, setInterests] = useState<string[]>([]);
   const [vibes, setVibes] = useState<string[]>([]);
+  const [connectionStatus, setConnectionStatus] = useState<'none' | 'pending_sent' | 'pending_received' | 'accepted'>('none');
+  const [connectionId, setConnectionId] = useState<string>();
+  const [connections, setConnections] = useState<Profile[]>([]);
 
   useEffect(() => {
     loadProfile();
@@ -120,10 +125,133 @@ export default function Profile() {
         setWillAttendEvents(willAttend);
         setAttendedEvents(attended);
       }
+
+      // Load connection status if viewing someone else's profile
+      if (userId !== user.id) {
+        const { data: connectionData } = await supabase
+          .from('user_connections')
+          .select('*')
+          .or(`and(user_id.eq.${user.id},connected_user_id.eq.${userId}),and(user_id.eq.${userId},connected_user_id.eq.${user.id})`)
+          .maybeSingle();
+
+        if (connectionData) {
+          if (connectionData.user_id === user.id) {
+            setConnectionStatus(connectionData.status === 'accepted' ? 'accepted' : 'pending_sent');
+          } else {
+            setConnectionStatus(connectionData.status === 'accepted' ? 'accepted' : 'pending_received');
+          }
+          setConnectionId(connectionData.id);
+        }
+      }
+
+      // Load connections list
+      const { data: connectionsData } = await supabase
+        .from('user_connections')
+        .select('user_id, connected_user_id, profiles!user_connections_user_id_fkey(id, first_name, last_name, email, city), profiles!user_connections_connected_user_id_fkey(id, first_name, last_name, email, city)')
+        .eq('status', 'accepted')
+        .or(`user_id.eq.${userId},connected_user_id.eq.${userId}`);
+
+      if (connectionsData) {
+        const connectedProfiles = connectionsData.map(conn => {
+          const isUserInitiator = conn.user_id === userId;
+          const profileData: any = isUserInitiator 
+            ? conn['profiles!user_connections_connected_user_id_fkey']
+            : conn['profiles!user_connections_user_id_fkey'];
+          
+          return profileData as Profile;
+        }).filter(Boolean);
+        
+        setConnections(connectedProfiles);
+      }
     } catch (error) {
       console.error("Error loading profile:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleConnect = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !userId) return;
+
+      const { error } = await supabase
+        .from('user_connections')
+        .insert({
+          user_id: user.id,
+          connected_user_id: userId,
+          status: 'pending'
+        });
+
+      if (error) throw error;
+
+      toast({
+        title: "Connection request sent",
+        description: "You'll be connected once they accept your request"
+      });
+
+      loadProfile();
+    } catch (error) {
+      console.error("Error connecting:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send connection request",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleAcceptConnection = async () => {
+    try {
+      if (!connectionId) return;
+
+      const { error } = await supabase
+        .from('user_connections')
+        .update({ status: 'accepted' })
+        .eq('id', connectionId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Connection accepted",
+        description: "You are now connected!"
+      });
+
+      loadProfile();
+    } catch (error) {
+      console.error("Error accepting connection:", error);
+      toast({
+        title: "Error",
+        description: "Failed to accept connection",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleRemoveConnection = async () => {
+    try {
+      if (!connectionId) return;
+
+      const { error } = await supabase
+        .from('user_connections')
+        .delete()
+        .eq('id', connectionId);
+
+      if (error) throw error;
+
+      toast({
+        title: "Connection removed",
+        description: "You are no longer connected"
+      });
+
+      loadProfile();
+    } catch (error) {
+      console.error("Error removing connection:", error);
+      toast({
+        title: "Error",
+        description: "Failed to remove connection",
+        variant: "destructive"
+      });
     }
   };
 
@@ -205,17 +333,71 @@ export default function Profile() {
                 {isOwnProfile ? "My Profile" : "User Profile"}
               </span>
             </div>
-            {isOwnProfile && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate("/settings")}
-                className="gap-2"
-              >
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            )}
+            <div className="flex gap-2">
+              {!isOwnProfile && connectionStatus === 'none' && (
+                <Button
+                  variant="default"
+                  onClick={handleConnect}
+                  className="gap-2"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Connect
+                </Button>
+              )}
+              
+              {!isOwnProfile && connectionStatus === 'pending_sent' && (
+                <Button
+                  variant="outline"
+                  onClick={handleRemoveConnection}
+                  className="gap-2"
+                >
+                  <UserX className="h-4 w-4" />
+                  Cancel Request
+                </Button>
+              )}
+              
+              {!isOwnProfile && connectionStatus === 'pending_received' && (
+                <>
+                  <Button
+                    variant="default"
+                    onClick={handleAcceptConnection}
+                    className="gap-2"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Accept
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleRemoveConnection}
+                  >
+                    <UserX className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
+              
+              {!isOwnProfile && connectionStatus === 'accepted' && (
+                <Button
+                  variant="secondary"
+                  onClick={handleRemoveConnection}
+                  className="gap-2"
+                >
+                  <UserCheck className="h-4 w-4" />
+                  Connected
+                </Button>
+              )}
+
+              {isOwnProfile && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate("/settings")}
+                  className="gap-2"
+                >
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -265,7 +447,7 @@ export default function Profile() {
 
           {/* Events Tabs */}
           <Tabs defaultValue="saved" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="saved" className="gap-2">
                 <Heart className="h-4 w-4" />
                 Saved ({willAttendEvents.length})
@@ -273,6 +455,10 @@ export default function Profile() {
               <TabsTrigger value="attended" className="gap-2">
                 <CheckCircle className="h-4 w-4" />
                 Attended ({attendedEvents.length})
+              </TabsTrigger>
+              <TabsTrigger value="connections" className="gap-2">
+                <Users className="h-4 w-4" />
+                Connections ({connections.length})
               </TabsTrigger>
             </TabsList>
 
@@ -300,6 +486,35 @@ export default function Profile() {
               ) : (
                 <div className="py-12 text-center text-muted-foreground">
                   No events marked as "Attended"
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="connections" className="mt-6">
+              {connections.length > 0 ? (
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {connections.map((connection) => (
+                    <Card
+                      key={connection.id}
+                      className="p-6 shadow-card transition-all hover:scale-[1.02] hover:shadow-glow cursor-pointer"
+                      onClick={() => navigate(`/profile/${connection.id}`)}
+                    >
+                      <h3 className="mb-2 text-xl font-semibold">
+                        {connection.first_name && connection.last_name
+                          ? `${connection.first_name} ${connection.last_name}`
+                          : connection.email.split("@")[0]
+                        }
+                      </h3>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        <span>{connection.city}</span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-muted-foreground">
+                  No connections yet. Search for people to connect with!
                 </div>
               )}
             </TabsContent>
