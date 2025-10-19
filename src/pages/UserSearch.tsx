@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ArrowLeft, Search, Sparkles, MapPin, UserPlus, UserCheck, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import logoIcon from "@/assets/logo-icon.png";
 
 type UserProfile = {
   id: string;
@@ -191,8 +192,8 @@ export default function UserSearch() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 Find People

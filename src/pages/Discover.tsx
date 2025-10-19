@@ -7,6 +7,7 @@ import { EventDetailDialog } from "@/components/EventDetailDialog";
 import { ScrapingStatusPanel } from "@/components/ScrapingStatusPanel";
 import { SwipeableEventCard } from "@/components/SwipeableEventCard";
 import { Settings, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, RotateCcw, Users } from "lucide-react";
+import logoIcon from "@/assets/logo-icon.png";
 import { useToast } from "@/hooks/use-toast";
 import TinderCard from "react-tinder-card";
 
@@ -291,8 +292,8 @@ export default function Discover() {
         <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
           <div className="container mx-auto flex items-center justify-between px-4 py-4">
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 SpotOn

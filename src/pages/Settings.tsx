@@ -1,14 +1,16 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AuthGuard } from "@/components/AuthGuard";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles, Plus } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus, Upload } from "lucide-react";
 import { INTEREST_CATEGORIES, VIBE_CATEGORIES, getAllInterests, getAllVibes } from "@/lib/categories";
+import logoIcon from "@/assets/logo-icon.png";
 import {
   Accordion,
   AccordionContent,
@@ -32,6 +34,9 @@ export default function Settings() {
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [customVibe, setCustomVibe] = useState("");
   const [emailFrequency, setEmailFrequency] = useState("weekly");
+  const [profilePictureUrl, setProfilePictureUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadUserPreferences();
@@ -46,10 +51,13 @@ export default function Settings() {
       // Load profile
       const { data: profile } = await supabase
         .from("profiles")
-        .select("city")
+        .select("city, profile_picture_url")
         .eq("id", user.id)
         .single();
-      if (profile) setCity(profile.city);
+      if (profile) {
+        setCity(profile.city);
+        setProfilePictureUrl(profile.profile_picture_url);
+      }
 
       // Load interests
       const { data: interests } = await supabase
@@ -111,6 +119,82 @@ export default function Settings() {
 
   const allPresetInterests = getAllInterests();
   const allPresetVibes = getAllVibes();
+
+  const handleUploadProfilePicture = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Please upload an image file",
+      });
+      return;
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "File size must be less than 5MB",
+      });
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Delete old profile picture if exists
+      if (profilePictureUrl) {
+        const oldPath = profilePictureUrl.split('/').pop();
+        if (oldPath) {
+          await supabase.storage.from('profile-pictures').remove([`${user.id}/${oldPath}`]);
+        }
+      }
+
+      // Upload new picture
+      const fileExt = file.name.split('.').pop();
+      const filePath = `${user.id}/${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('profile-pictures')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('profile-pictures')
+        .getPublicUrl(filePath);
+
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ profile_picture_url: publicUrl })
+        .eq('id', user.id);
+
+      if (updateError) throw updateError;
+
+      setProfilePictureUrl(publicUrl);
+      toast({
+        title: "Success",
+        description: "Profile picture updated!",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (selectedInterests.length === 0 || selectedVibes.length === 0) {
@@ -188,8 +272,8 @@ export default function Settings() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 Settings
@@ -201,6 +285,41 @@ export default function Settings() {
         <div className="container mx-auto px-4 py-8">
           <div className="mx-auto max-w-4xl">
             <div className="space-y-8 rounded-2xl bg-card p-8 shadow-card">
+              {/* Profile Picture */}
+              <div className="space-y-4">
+                <Label>Profile Picture</Label>
+                <div className="flex items-center gap-4">
+                  <Avatar className="h-24 w-24">
+                    <AvatarImage src={profilePictureUrl || undefined} />
+                    <AvatarFallback className="bg-primary text-primary-foreground text-2xl">
+                      {city[0]?.toUpperCase() || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleUploadProfilePicture}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className="gap-2"
+                    >
+                      <Upload className="h-4 w-4" />
+                      {uploading ? "Uploading..." : "Upload Photo"}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      Max 5MB. JPG, PNG, or WEBP
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* City */}
               <div className="space-y-2">
                 <Label htmlFor="city">City</Label>

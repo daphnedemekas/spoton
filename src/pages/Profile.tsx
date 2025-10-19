@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AuthGuard } from "@/components/AuthGuard";
 import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings, Users, UserPlus, UserCheck, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import logoIcon from "@/assets/logo-icon.png";
 
 type Profile = {
   id: string;
@@ -337,8 +338,8 @@ export default function Profile() {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div className="flex flex-1 items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white shadow-glow">
+                <img src={logoIcon} alt="SpotOn" className="h-8 w-8" />
               </div>
               <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                 {isOwnProfile ? "My Profile" : "User Profile"}
