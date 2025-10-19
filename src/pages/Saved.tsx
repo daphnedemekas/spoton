@@ -355,7 +355,7 @@ const Saved = () => {
                               className="w-full"
                             >
                               <Trash2 className="h-4 w-4 mr-1" />
-                              Remove from Saved
+                              Remove
                             </Button>
                           )}
                         </div>
@@ -471,7 +471,7 @@ const Saved = () => {
                                         className="w-full"
                                       >
                                         <Trash2 className="h-4 w-4 mr-1" />
-                                        Remove from Saved
+                                        Remove
                                       </Button>
                                     )}
                                   </div>
