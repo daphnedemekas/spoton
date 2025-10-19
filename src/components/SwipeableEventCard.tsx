@@ -1,8 +1,10 @@
-import { forwardRef } from "react";
+import { forwardRef, useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, MapPin, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type Event = {
   id: string;
@@ -22,6 +24,34 @@ interface SwipeableEventCardProps {
 
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
   ({ event }, ref) => {
+    const [otherUsers, setOtherUsers] = useState<Array<{ profile_picture_url: string | null; first_name: string | null }>>([]);
+
+    useEffect(() => {
+      const fetchOtherUsers = async () => {
+        const { data: currentUser } = await supabase.auth.getUser();
+        
+        const { data: attendees } = await supabase
+          .from('event_attendance')
+          .select('user_id, profiles(profile_picture_url, first_name)')
+          .eq('event_id', event.id)
+          .eq('status', 'saved')
+          .neq('user_id', currentUser?.user?.id || '')
+          .limit(5);
+
+        if (attendees) {
+          const users = attendees
+            .filter(a => a.profiles)
+            .map(a => ({
+              profile_picture_url: (a.profiles as any).profile_picture_url,
+              first_name: (a.profiles as any).first_name
+            }));
+          setOtherUsers(users);
+        }
+      };
+
+      fetchOtherUsers();
+    }, [event.id]);
+
     const handleEventLink = (e: React.MouseEvent | React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
@@ -84,6 +114,20 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 </div>
               </div>
             </div>
+            
+            {/* Other users who saved this event */}
+            {otherUsers.length > 0 && (
+              <div className="absolute bottom-16 right-4 flex -space-x-2">
+                {otherUsers.map((user, i) => (
+                  <Avatar key={i} className="h-8 w-8 border-2 border-card">
+                    <AvatarImage src={user.profile_picture_url || undefined} />
+                    <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                      {user.first_name?.[0] || '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
+            )}
             
             {/* Fixed button bar */}
             {event.event_link && (
