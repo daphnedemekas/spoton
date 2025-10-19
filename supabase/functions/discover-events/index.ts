@@ -48,8 +48,12 @@ serve(async (req) => {
       throw new Error('User profile not found');
     }
 
-    const userInterests = interests.map(i => i.interest).join(', ');
-    const userVibes = vibes.map(v => v.vibe).join(', ');
+    // Shuffle interests and vibes for variety in prompts
+    const shuffledInterests = interests.map(i => i.interest).sort(() => Math.random() - 0.5);
+    const shuffledVibes = vibes.map(v => v.vibe).sort(() => Math.random() - 0.5);
+    
+    const userInterests = shuffledInterests.join(', ');
+    const userVibes = shuffledVibes.join(', ');
     const city = profile.city;
 
     // Build interaction context
@@ -80,7 +84,7 @@ serve(async (req) => {
     const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     // Step 1: Check for cached website suggestions
-    const interestsList = interests.map(i => i.interest); // All interests
+    const interestsList = shuffledInterests; // Use shuffled interests
     
     console.log('Checking for cached website suggestions...');
     
@@ -116,7 +120,7 @@ serve(async (req) => {
           messages: [
             {
               role: 'system',
-              content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences.`
+              content: `You are an event and activity discovery expert. Given user interests and a city, suggest the best websites to scrape for relevant events, activities, and experiences. Focus on variety and lesser-known local venues.`
             },
             {
               role: 'user',
@@ -204,9 +208,20 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     if (BRAVE_API_KEY) {
       console.log('Using Brave Search to find event sites...');
       
-      for (const interest of interestsList.slice(0, 5)) { // Limit to avoid rate limits
+      // Randomize which interests to search for variety
+      const searchInterests = shuffledInterests.slice(0, 5);
+      
+      for (const interest of searchInterests) {
         try {
-          const searchQuery = `${interest} events ${city} site:*.com OR site:*.org`;
+          // Vary search query style for different results
+          const queryStyles = [
+            `${interest} events ${city} site:*.com OR site:*.org`,
+            `upcoming ${interest} ${city} calendar`,
+            `${interest} activities near ${city}`,
+            `${city} ${interest} schedule`
+          ];
+          const searchQuery = queryStyles[Math.floor(Math.random() * queryStyles.length)];
+          
           const braveResponse = await fetch(
             `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(searchQuery)}&count=10`,
             {
@@ -241,12 +256,17 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       console.log(`Brave Search suggested ${braveWebsites.length} total websites`);
     }
 
-    // Combine Gemini and Brave suggestions, limit to 20 total
-    const allWebsites = [
+    // Combine Gemini and Brave suggestions and RANDOMIZE
+    const allAvailableWebsites = [
       ...suggestedWebsites.websites,
       ...braveWebsites
-    ].slice(0, 20); // Limit to 20 sites
-    console.log(`Total websites to scrape: ${allWebsites.length}`);
+    ];
+    
+    // Shuffle the websites to get different ones each time
+    const shuffled = allAvailableWebsites.sort(() => Math.random() - 0.5);
+    const allWebsites = shuffled.slice(0, 20); // Take random 20
+    
+    console.log(`Selected ${allWebsites.length} random websites from ${allAvailableWebsites.length} available`);
 
     // Step 2: Scrape the suggested websites
     const allScrapedData: any[] = [];
@@ -296,6 +316,15 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
     }
 
     // Step 3: Use Gemini to process and extract structured events
+    // Vary the prompt slightly for different results each time
+    const promptVariations = [
+      'Extract upcoming events that match user preferences with specific dates and locations.',
+      'Find exciting local events happening soon that align with user interests.',
+      'Discover unique activities and events in the area for the coming week.',
+      'Identify interesting upcoming events from the scraped content.'
+    ];
+    const extractionPrompt = promptVariations[Math.floor(Math.random() * promptVariations.length)];
+    
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -329,7 +358,7 @@ HTML Content:
 ${data.content}
 ---`).join('\n\n')}
 
-Extract 15-20 unique upcoming events happening between ${today} and ${nextWeek}.
+Extract 15-20 unique upcoming events happening between ${today} and ${nextWeek}. ${extractionPrompt}
 
 User preferences:
 - Interests: ${userInterests}
