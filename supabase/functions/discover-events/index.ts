@@ -112,7 +112,7 @@ serve(async (req) => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
     const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth() + 1; // 0-indexed
+    const currentMonth = now.getMonth() + 1;
     const currentDay = now.getDate();
     
     // Generate array of next 7 days for day-by-day searching
@@ -306,32 +306,29 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       console.log(`Brave Search suggested ${braveWebsites.length} total websites`);
     }
 
-    // Combine Gemini and Brave suggestions and RANDOMIZE
+    // Combine and shuffle websites
     const allAvailableWebsites = [
       ...suggestedWebsites.websites,
       ...braveWebsites
     ];
     
-    // Remove duplicates by URL
     const uniqueWebsites = Array.from(
       new Map(allAvailableWebsites.map(w => [w.url, w])).values()
     );
     
-    // Shuffle and take up to 40 websites (more coverage = more events)
     const shuffled = uniqueWebsites.sort(() => Math.random() - 0.5);
-    const allWebsites = shuffled.slice(0, 40);
     
-    console.log(`Selected ${allWebsites.length} random websites from ${uniqueWebsites.length} unique sites (${allAvailableWebsites.length} total with duplicates)`);
+    // Split into priority (first 8) and background (rest)
+    const priorityWebsites = shuffled.slice(0, 8);
+    const backgroundWebsites = shuffled.slice(8, 40);
+    
+    console.log(`Priority batch: ${priorityWebsites.length} websites`);
+    console.log(`Background batch: ${backgroundWebsites.length} websites`);
 
-    // Step 2: Scrape websites in parallel with concurrency limit
-    console.log(`Scraping ${allWebsites.length} websites with parallel processing...`);
-    const allScrapedData: any[] = [];
+    // Scraping function
     const scrapingStatus: any[] = [];
     
-    // Parallel scraping helper with concurrency limit
-    const CONCURRENCY_LIMIT = 10;
-    
-    const scrapeWebsite = async (website: any) => {
+    const scrapeWebsite = async (website: any, dataArray: any[]) => {
       console.log(`Scraping: ${website.url}`);
       
       try {
@@ -344,7 +341,7 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
         
         if (response.ok) {
           const html = await response.text();
-          allScrapedData.push({
+          dataArray.push({
             source: website.source,
             interest: website.interest,
             url: website.url,
@@ -358,17 +355,14 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
         scrapingStatus.push({ url: website.url, source: website.source, interest: website.interest, status: 'failed' });
       }
     };
+
+    // Scrape priority websites first
+    const priorityScrapedData: any[] = [];
+    await Promise.all(priorityWebsites.map(website => scrapeWebsite(website, priorityScrapedData)));
     
-    // Process in batches with concurrency limit
-    for (let i = 0; i < allWebsites.length; i += CONCURRENCY_LIMIT) {
-      const batch = allWebsites.slice(i, i + CONCURRENCY_LIMIT);
-      console.log(`Processing batch ${Math.floor(i / CONCURRENCY_LIMIT) + 1}/${Math.ceil(allWebsites.length / CONCURRENCY_LIMIT)}`);
-      await Promise.all(batch.map(website => scrapeWebsite(website)));
-    }
+    console.log(`Priority batch scraped: ${priorityScrapedData.length} pages`);
 
-    console.log(`Total pages scraped: ${allScrapedData.length}`);
-
-    if (allScrapedData.length === 0) {
+    if (priorityScrapedData.length === 0) {
       return new Response(
         JSON.stringify({ 
           success: false,
@@ -379,541 +373,80 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       );
     }
 
-    // Step 3: Use Gemini to process and extract structured events
-    // Vary the prompt slightly for different results each time
-    const promptVariations = [
-      'Extract upcoming events that match user preferences with specific dates and locations.',
-      'Find exciting local events happening soon that align with user interests.',
-      'Discover unique activities and events in the area for the coming week.',
-      'Identify interesting upcoming events from the scraped content.'
-    ];
-    const extractionPrompt = promptVariations[Math.floor(Math.random() * promptVariations.length)];
-    
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are an event extraction and ranking assistant. Parse HTML from various event platforms and extract REAL upcoming events with EXACT URLs. For each event, assign a relevance score (0-100) based on how well it matches the user's preferences.
-
-**CRITICAL LOCATION FILTER: ONLY extract events that are physically located in ${city} OR are explicitly online/virtual events. DO NOT include events from other cities like London, Oxford, Cambridge, etc.**
-
-SCORING CRITERIA (total 100 points):
-- Interest Match (30 points): How many user interests align with the event
-- Vibe Match (25 points): How well the event atmosphere matches user vibes
-- In-Person Bonus (20 points): In-person events in ${city} get full points, online events get 10 points
-- Interaction History (15 points): Boost similar to saved events, downrank similar to removed events
-- Date Proximity (10 points): Events sooner get higher scores
-
-Return events sorted by score (highest first).`
-          },
-          {
-            role: 'user',
-            content: `Here is scraped HTML content from event platforms in ${city}:
-
-${allScrapedData.map((data: any, i: number) => `[Source ${i + 1}: ${data.source} - ${data.interest}]
-URL: ${data.url}
-HTML Content:
-${data.content}
----`).join('\n\n')}
-
-Extract 30-40 unique upcoming events happening in the next 7 days (${today} onwards). ${extractionPrompt}
-
-User preferences:
-- Interests: ${userInterests}
-- Vibes: ${userVibes}
-${interactionContext}
-
-REQUIREMENTS:
-1. Extract SPECIFIC event page URLs from the HTML (not listing pages)
-2. Parse event titles, dates, descriptions, locations, and **times** from the HTML
-3. Extract the event time in a readable format like "7:00 PM" or "2:00 PM - 4:00 PM". If no specific time is found, use "All Day"
-4. Identify if event is in-person or virtual/online - prefer in-person events
-5. **CRITICAL: ONLY include events that are EITHER in ${city} OR explicitly marked as "Online" or "Virtual". DO NOT include events from other cities.**
-6. Remove duplicate events (same URL or same title/venue/date)
-7. Only include events with specific dates in the next 7 days (starting from ${today})
-8. Format dates as YYYY-MM-DD
-9. Calculate relevance_score (0-100) for each event:
-   - Give high scores to in-person events in ${city} that match user interests
-   - Give lower scores to virtual/online events
-   - Consider interaction history to boost/downrank events
-10. Sort events by relevance_score (highest first)
-11. Extract detailed descriptions (at least 2-3 sentences)
-12. For in-person events: Include specific venue names and addresses in location field. The location MUST be in ${city}.
-13. For online/virtual events: Set location to exactly "Online"
-14. Ensure each URL is a direct link to a specific event page, not a listing page
-
-CRITICAL DATE PARSING RULES:
-- Today's date is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})
-- Current year is ${currentYear}
-- When you see dates like "Dec 15" or "December 15", they mean ${currentYear}-12-15
-- When you see dates like "Jan 10", they mean ${currentYear + 1}-01-10 (next year if we're past January)
-- If an event shows "Mon, Dec 15" or similar without a year, assume ${currentYear} if the date hasn't passed yet
-- Always double-check that parsed dates are within 7 days from ${today}
-- Do NOT extract events that are more than 7 days away
-- If a date seems unclear, skip that event rather than guessing
-
-Return events using the return_events function.`
-          }
-        ],
-        tools: [
-          {
-            type: "function",
-            function: {
-              name: "return_events",
-              description: "Return discovered events in structured format",
-              parameters: {
-                type: "object",
-                properties: {
-                  events: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        description: { type: "string" },
-                        date: { type: "string" },
-                        time: { type: "string", description: "Event time like '7:00 PM' or '2:00 PM - 4:00 PM' or 'All Day'" },
-                        location: { type: "string" },
-                        event_link: { type: "string" },
-                        interests: { type: "array", items: { type: "string" } },
-                        vibes: { type: "array", items: { type: "string" } },
-                        relevance_score: { type: "number", description: "Score from 0-100 based on user preference match" }
-                      },
-                      required: ["title", "description", "date", "time", "location", "event_link", "interests", "vibes", "relevance_score"],
-                      additionalProperties: false
-                    }
-                  }
-                },
-                required: ["events"],
-                additionalProperties: false
-              }
-            }
-          }
-        ],
-        tool_choice: { type: "function", function: { name: "return_events" } }
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('AI API error:', response.status, errorText);
-      
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+    // Process priority events and return immediately
+    const priorityEvents = await processEventsFromScrapedData(
+      priorityScrapedData,
+      {
+        city,
+        userInterests,
+        userVibes,
+        interactionContext,
+        today,
+        currentYear,
+        currentMonth,
+        currentDay,
+        LOVABLE_API_KEY: LOVABLE_API_KEY!,
+        supabaseClient,
+        userId
       }
+    );
+
+    // Start background processing for remaining websites
+    if (backgroundWebsites.length > 0) {
+      console.log(`Starting background processing for ${backgroundWebsites.length} websites`);
       
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: 'AI credits exhausted. Please add credits to continue.' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      
-      throw new Error('Failed to discover events');
-    }
-
-    const data = await response.json();
-    console.log('AI response:', JSON.stringify(data, null, 2));
-
-    // Extract events from tool call
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    if (!toolCall) {
-      throw new Error('No events returned from AI');
-    }
-
-    const eventsData = typeof toolCall.function.arguments === 'string' 
-      ? JSON.parse(toolCall.function.arguments)
-      : toolCall.function.arguments;
-
-    // Helper function to verify URL accessibility
-    const verifyUrl = async (url: string): Promise<boolean> => {
-      try {
-        const urlObj = new URL(url);
+      const backgroundTask = async () => {
+        const backgroundScrapedData: any[] = [];
         
-        // First try HEAD request
-        let response = await fetch(url, {
-          method: 'HEAD',
-          headers: { 'User-Agent': 'Mozilla/5.0' },
-          redirect: 'follow',
-          signal: AbortSignal.timeout(5000)
-        });
-        
-        // If HEAD fails or returns 404/410, try GET to be sure
-        if (!response.ok || response.status === 404 || response.status === 410) {
-          console.log(`HEAD request failed (${response.status}), trying GET for ${url}`);
-          response = await fetch(url, {
-            method: 'GET',
-            headers: { 'User-Agent': 'Mozilla/5.0' },
-            redirect: 'follow',
-            signal: AbortSignal.timeout(5000)
-          });
+        // Scrape background websites
+        const CONCURRENCY_LIMIT = 10;
+        for (let i = 0; i < backgroundWebsites.length; i += CONCURRENCY_LIMIT) {
+          const batch = backgroundWebsites.slice(i, i + CONCURRENCY_LIMIT);
+          await Promise.all(batch.map(website => scrapeWebsite(website, backgroundScrapedData)));
         }
         
-        // Check for common 404 indicators in response
-        if (response.ok) {
-          // Additional check: fetch a bit of content to detect soft 404s
-          const contentType = response.headers.get('content-type') || '';
-          if (contentType.includes('text/html')) {
-            const text = await response.text();
-            const lowerText = text.toLowerCase();
-            
-            // Check for common 404 page indicators
-            const is404Page = 
-              lowerText.includes('page not found') ||
-              lowerText.includes('404 error') ||
-              lowerText.includes('page cannot be found') ||
-              lowerText.includes('page does not exist') ||
-              (lowerText.includes('404') && lowerText.includes('not found'));
-            
-            if (is404Page) {
-              console.log(`Detected 404 page content for ${url}`);
-              return false;
-            }
-          }
-        }
+        console.log(`Background batch scraped: ${backgroundScrapedData.length} pages`);
         
-        return response.ok;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.log(`URL verification failed for ${url}: ${errorMessage}`);
-        return false;
-      }
-    };
-
-    // Advanced duplicate detection and validation
-    const validatedEvents = [];
-    const seenUrls = new Set<string>();
-    const seenSignatures = new Set<string>();
-    
-    // Helper to normalize URLs for comparison
-    const normalizeUrl = (url: string): string => {
-      try {
-        const urlObj = new URL(url);
-        // Remove trailing slashes, query params, fragments
-        return urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
-      } catch {
-        return url.toLowerCase().replace(/\/$/, '');
-      }
-    };
-    
-    // Helper to create fuzzy signature (ignore punctuation, normalize whitespace)
-    const createFuzzySignature = (event: any): string => {
-      const title = event.title.toLowerCase()
-        .replace(/[^\w\s]/g, '') // Remove punctuation
-        .replace(/\s+/g, ' ')     // Normalize whitespace
-        .trim();
-      const location = event.location.toLowerCase()
-        .replace(/[^\w\s]/g, '')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 50); // First 50 chars of location
-      return `${title}|${event.date}|${location}`;
-    };
-    
-    // First pass: Basic validation and format checking
-    const eventsToVerify = [];
-    
-    for (const event of eventsData.events) {
-      // Validate URL format
-      const hasValidLink = event.event_link && 
-        typeof event.event_link === 'string' && 
-        (event.event_link.startsWith('http://') || event.event_link.startsWith('https://')) &&
-        event.event_link.length > 10 &&
-        !event.event_link.includes('example.com') &&
-        !event.event_link.includes('placeholder') &&
-        event.event_link.includes('.');
-      
-      const hasValidDate = event.date && 
-        typeof event.date === 'string' && 
-        /^\d{4}-\d{2}-\d{2}$/.test(event.date);
-      
-      if (!hasValidLink) {
-        console.log(`Skipping event "${event.title}" - invalid or placeholder link: ${event.event_link}`);
-        continue;
-      }
-      if (!hasValidDate) {
-        console.log(`Skipping event "${event.title}" - invalid date format: ${event.date}`);
-        continue;
-      }
-
-      // Check for URL duplicates (normalized)
-      const normalizedUrl = normalizeUrl(event.event_link);
-      if (seenUrls.has(normalizedUrl)) {
-        console.log(`Skipping duplicate URL: ${event.title} - ${event.event_link}`);
-        continue;
-      }
-      
-      // Check for fuzzy duplicate events (same title/date/location with slight variations)
-      const fuzzySignature = createFuzzySignature(event);
-      if (seenSignatures.has(fuzzySignature)) {
-        console.log(`Skipping fuzzy duplicate: ${event.title}`);
-        continue;
-      }
-
-      seenUrls.add(normalizedUrl);
-      seenSignatures.add(fuzzySignature);
-      eventsToVerify.push(event);
-    }
-
-    // Second pass: Batch URL verification in parallel for speed
-    const verificationBatchSize = 10;
-    
-    for (let i = 0; i < eventsToVerify.length; i += verificationBatchSize) {
-      const batch = eventsToVerify.slice(i, i + verificationBatchSize);
-      const results = await Promise.all(
-        batch.map(async (event) => ({
-          event,
-          isValid: await verifyUrl(event.event_link)
-        }))
-      );
-      
-      // Add valid events to final list
-      for (const { event, isValid } of results) {
-        if (isValid) {
-          validatedEvents.push(event);
-        } else {
-          console.log(`Skipping event "${event.title}" - URL not accessible: ${event.event_link}`);
-        }
-      }
-    }
-    
-    console.log(`${validatedEvents.length} events passed validation and URL verification`);
-
-    // If less than 5 valid events, retry once
-    let finalEvents = validatedEvents;
-    if (finalEvents.length < 5) {
-      console.log('Too few valid events, retrying with stricter instructions...');
-      
-      const retryResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
+        if (backgroundScrapedData.length > 0) {
+          await processEventsFromScrapedData(
+            backgroundScrapedData,
             {
-              role: 'system',
-              content: `You are an event discovery assistant. CRITICAL: Only return events with VERIFIED, ACCESSIBLE, SPECIFIC event page URLs. DO NOT use general venue URLs ending in /events/ or /whats-on/.`
-            },
-            {
-              role: 'user',
-              content: `Find ${10 - finalEvents.length} upcoming events in ${city} in the next 7 days (starting from ${today}) with SPECIFIC event page URLs (not general /events/ pages).
-
-Interests: ${userInterests}
-Vibes: ${userVibes}
-
-Each URL must link to a SPECIFIC event page with details, dates, and registration.`
+              city,
+              userInterests,
+              userVibes,
+              interactionContext,
+              today,
+              currentYear,
+              currentMonth,
+              currentDay,
+              LOVABLE_API_KEY: LOVABLE_API_KEY!,
+              supabaseClient,
+              userId,
+              isBackground: true
             }
-          ],
-          tools: [
-            {
-              type: "function",
-              function: {
-                name: "return_events",
-                description: "Return discovered events",
-                parameters: {
-                  type: "object",
-                  properties: {
-                    events: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          title: { type: "string" },
-                          description: { type: "string" },
-                          date: { type: "string" },
-                          location: { type: "string" },
-                          vibes: { type: "array", items: { type: "string" } },
-                          interests: { type: "array", items: { type: "string" } },
-                          event_link: { type: "string" }
-                        },
-                        required: ["title", "description", "date", "location", "vibes", "interests", "event_link"]
-                      }
-                    }
-                  },
-                  required: ["events"]
-                }
-              }
-            }
-          ],
-          tool_choice: { type: "function", function: { name: "return_events" } }
-        }),
-      });
-
-      if (retryResponse.ok) {
-        const retryData = await retryResponse.json();
-        const retryToolCall = retryData.choices[0]?.message?.tool_calls?.[0];
-        
-        if (retryToolCall?.function?.name === 'return_events') {
-          const retryEventsData = JSON.parse(retryToolCall.function.arguments);
-          
-          for (const event of retryEventsData.events) {
-            const url = event.event_link?.trim();
-            if (!url || !url.startsWith('http')) continue;
-            
-            const isWorking = await verifyUrl(url);
-            if (isWorking) {
-              finalEvents.push(event);
-              console.log(`Retry success: "${event.title}" with working URL`);
-            }
-          }
+          );
+          console.log('Background event processing complete');
         }
-      }
+      };
       
-      console.log(`After retry: ${finalEvents.length} total valid events`);
+      // Start background task (don't await)
+      backgroundTask().catch(err => console.error('Background task error:', err));
     }
 
-    const validEvents = finalEvents;
-
-    if (validEvents.length === 0) {
-      return new Response(
-        JSON.stringify({ 
-          success: false,
-          error: 'No valid events found. The AI could not find events with valid URLs. Please try again or adjust your preferences.',
-          eventsCount: 0
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
-      );
-    }
-
-    // Smart event updates: only insert new events, keep existing ones, exclude removed events
-    console.log('Fetching existing events and removed interactions...');
+    // Return priority events immediately
     const { data: existingEvents } = await supabaseClient
       .from('events')
-      .select('title, date, location, event_link');
-
-    // Get removed events from interaction history
-    const { data: removedInteractions } = await supabaseClient
-      .from('event_interactions')
-      .select('event_title, event_description')
-      .eq('user_id', userId)
-      .eq('interaction_type', 'removed');
-
-    // Create comprehensive deduplication sets
-    const existingUrls = new Set(
-      (existingEvents || [])
-        .filter(e => e.event_link)
-        .map(e => {
-          try {
-            const urlObj = new URL(e.event_link);
-            return urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
-          } catch {
-            return e.event_link.toLowerCase().replace(/\/$/, '');
-          }
-        })
-    );
-    
-    const existingSignatures = new Set(
-      (existingEvents || []).map(e => {
-        const title = e.title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-        const location = e.location.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().substring(0, 50);
-        return `${title}|${e.date}|${location}`;
-      })
-    );
-
-    // Create a Set of removed event titles (case-insensitive, fuzzy)
-    const removedTitles = new Set(
-      (removedInteractions || []).map(r => 
-        r.event_title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
-      )
-    );
-
-    // Filter out events that already exist OR were previously removed
-    const newEvents = validEvents.filter((event: any) => {
-      // Normalize URL for comparison
-      let normalizedEventUrl = '';
-      try {
-        const urlObj = new URL(event.event_link);
-        normalizedEventUrl = urlObj.origin + urlObj.pathname.replace(/\/$/, '').toLowerCase();
-      } catch {
-        normalizedEventUrl = event.event_link.toLowerCase().replace(/\/$/, '');
-      }
-      
-      // Create fuzzy signature
-      const title = event.title.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim();
-      const location = event.location.toLowerCase().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim().substring(0, 50);
-      const signature = `${title}|${event.date}|${location}`;
-      
-      // Skip if URL already exists
-      if (existingUrls.has(normalizedEventUrl)) {
-        console.log(`Skipping duplicate URL: ${event.title}`);
-        return false;
-      }
-      
-      // Skip if event signature already exists
-      if (existingSignatures.has(signature)) {
-        console.log(`Skipping duplicate event: ${event.title}`);
-        return false;
-      }
-      
-      // Skip if was removed
-      if (removedTitles.has(title)) {
-        console.log(`Skipping removed event: ${event.title}`);
-        return false;
-      }
-      
-      return true;
-    });
-
-    console.log(`Found ${newEvents.length} new events out of ${validEvents.length} total (${existingEvents?.length || 0} already exist)`);
-
-    if (newEvents.length === 0) {
-      console.log('No new events to insert');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          eventsCount: 0,
-          existingCount: existingEvents?.length || 0,
-          message: 'All discovered events already exist in database',
-          scrapingStatus: scrapingStatus
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Insert only new events
-    const eventsToInsert = newEvents.map((event: any) => ({
-      title: event.title,
-      description: event.description,
-      date: event.date,
-      location: event.location,
-      event_link: event.event_link,
-      interests: event.interests,
-      vibes: event.vibes,
-    }));
-
-    const { data: insertedEvents, error: insertError } = await supabaseClient
-      .from('events')
-      .insert(eventsToInsert)
-      .select();
-
-    if (insertError) {
-      console.error('Error inserting events:', insertError);
-      throw insertError;
-    }
-
-    console.log('Successfully inserted', insertedEvents?.length, 'new events');
+      .select('title');
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        eventsCount: insertedEvents?.length || 0,
+        eventsCount: priorityEvents,
         existingCount: existingEvents?.length || 0,
-        totalEvents: (existingEvents?.length || 0) + (insertedEvents?.length || 0),
-        message: `Added ${insertedEvents?.length || 0} new events in ${city}`,
-        scrapingStatus: scrapingStatus
+        totalEvents: (existingEvents?.length || 0) + priorityEvents,
+        message: `Added ${priorityEvents} new events in ${city}`,
+        scrapingStatus: scrapingStatus,
+        backgroundProcessing: backgroundWebsites.length > 0
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -929,3 +462,210 @@ Each URL must link to a SPECIFIC event page with details, dates, and registratio
     );
   }
 });
+
+// Helper function to process scraped data and insert events
+async function processEventsFromScrapedData(
+  scrapedData: any[],
+  context: {
+    city: string;
+    userInterests: string;
+    userVibes: string;
+    interactionContext: string;
+    today: string;
+    currentYear: number;
+    currentMonth: number;
+    currentDay: number;
+    LOVABLE_API_KEY: string;
+    supabaseClient: any;
+    userId: string;
+    isBackground?: boolean;
+  }
+): Promise<number> {
+  const {
+    city,
+    userInterests,
+    userVibes,
+    interactionContext,
+    today,
+    currentYear,
+    currentMonth,
+    currentDay,
+    LOVABLE_API_KEY,
+    supabaseClient,
+    userId,
+    isBackground = false
+  } = context;
+
+  const extractionPrompts = [
+    'Extract upcoming events that match user preferences with specific dates and locations.',
+    'Find exciting local events happening soon that align with user interests.',
+    'Discover unique activities and events in the area for the coming week.',
+    'Identify interesting upcoming events from the scraped content.'
+  ];
+  const extractionPrompt = extractionPrompts[Math.floor(Math.random() * extractionPrompts.length)];
+
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an event extraction assistant. Extract REAL upcoming events with EXACT URLs from HTML content. Only include events in ${city} or explicitly online/virtual events.`
+        },
+        {
+          role: 'user',
+          content: `HTML content from event platforms in ${city}:
+
+${scrapedData.map((data: any, i: number) => `[Source ${i + 1}: ${data.source} - ${data.interest}]\n${data.content.substring(0, 15000)}\n---`).join('\n\n')}
+
+Extract 20-30 unique events in the next 7 days (from ${today}).
+User interests: ${userInterests}
+User vibes: ${userVibes}
+${interactionContext}
+
+Requirements:
+- ONLY events in ${city} OR online/virtual
+- Specific event page URLs (not listing pages)
+- Dates as YYYY-MM-DD
+- Include event time
+- Detailed descriptions
+- Format: Today is ${today} (${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')})`
+        }
+      ],
+      tools: [
+        {
+          type: "function",
+          function: {
+            name: "return_events",
+            description: "Return discovered events",
+            parameters: {
+              type: "object",
+              properties: {
+                events: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      description: { type: "string" },
+                      date: { type: "string" },
+                      time: { type: "string" },
+                      location: { type: "string" },
+                      event_link: { type: "string" },
+                      interests: { type: "array", items: { type: "string" } },
+                      vibes: { type: "array", items: { type: "string" } }
+                    },
+                    required: ["title", "description", "date", "time", "location", "event_link", "interests", "vibes"]
+                  }
+                }
+              },
+              required: ["events"]
+            }
+          }
+        }
+      ],
+      tool_choice: { type: "function", function: { name: "return_events" } }
+    }),
+  });
+
+  if (!response.ok) {
+    console.log('AI API error:', response.status);
+    return 0;
+  }
+
+  const data = await response.json();
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  
+  if (!toolCall) {
+    return 0;
+  }
+
+  const eventsData = typeof toolCall.function.arguments === 'string' 
+    ? JSON.parse(toolCall.function.arguments)
+    : toolCall.function.arguments;
+
+  // Validate events
+  const validEvents = [];
+  
+  for (const event of eventsData.events) {
+    const hasValidLink = event.event_link && 
+      event.event_link.startsWith('http') &&
+      event.event_link.length > 10;
+    
+    const hasValidDate = event.date && 
+      /^\d{4}-\d{2}-\d{2}$/.test(event.date);
+    
+    if (hasValidLink && hasValidDate) {
+      validEvents.push(event);
+    }
+  }
+
+  if (validEvents.length === 0) {
+    return 0;
+  }
+
+  // Check for duplicates
+  const { data: existingEvents } = await supabaseClient
+    .from('events')
+    .select('event_link, title, date');
+
+  const { data: removedInteractions } = await supabaseClient
+    .from('event_interactions')
+    .select('event_title')
+    .eq('user_id', userId)
+    .eq('interaction_type', 'removed');
+
+  const existingUrls = new Set(
+    (existingEvents || []).map((e: any) => e.event_link?.toLowerCase())
+  );
+  
+  const removedTitles = new Set(
+    (removedInteractions || []).map((r: any) => 
+      r.event_title.toLowerCase().replace(/[^\w\s]/g, '').trim()
+    )
+  );
+
+  const newEvents = validEvents.filter((event: any) => {
+    const urlExists = existingUrls.has(event.event_link.toLowerCase());
+    const title = event.title.toLowerCase().replace(/[^\\w\\s]/g, '').trim();
+    const wasRemoved = removedTitles.has(title);
+    
+    return !urlExists && !wasRemoved;
+  });
+
+  console.log(`Found ${newEvents.length} new events (${isBackground ? 'background' : 'priority'})`);
+
+  if (newEvents.length === 0) {
+    return 0;
+  }
+
+  // Insert events
+  const eventsToInsert = newEvents.map((event: any) => ({
+    title: event.title,
+    description: event.description,
+    date: event.date,
+    time: event.time,
+    location: event.location,
+    event_link: event.event_link,
+    interests: event.interests,
+    vibes: event.vibes,
+  }));
+
+  const { data: insertedEvents, error: insertError } = await supabaseClient
+    .from('events')
+    .insert(eventsToInsert)
+    .select();
+
+  if (insertError) {
+    console.error('Error inserting events:', insertError);
+    return 0;
+  }
+
+  console.log(`Inserted ${insertedEvents?.length || 0} events (${isBackground ? 'background' : 'priority'})`);
+  return insertedEvents?.length || 0;
+}
