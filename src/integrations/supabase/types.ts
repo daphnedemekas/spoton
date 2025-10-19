@@ -93,7 +93,9 @@ export type Database = {
           created_at: string
           date: string
           description: string
+          event_link: string | null
           id: string
+          image_url: string | null
           interests: string[]
           location: string
           title: string
@@ -103,7 +105,9 @@ export type Database = {
           created_at?: string
           date: string
           description: string
+          event_link?: string | null
           id?: string
+          image_url?: string | null
           interests: string[]
           location: string
           title: string
@@ -113,7 +117,9 @@ export type Database = {
           created_at?: string
           date?: string
           description?: string
+          event_link?: string | null
           id?: string
+          image_url?: string | null
           interests?: string[]
           location?: string
           title?: string

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
+import { EventDetailDialog } from "@/components/EventDetailDialog";
 import { Settings, Calendar, MapPin, Sparkles, User, Check, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
@@ -16,6 +17,8 @@ type Event = {
   location: string;
   vibes: string[];
   interests: string[];
+  image_url?: string;
+  event_link?: string;
 };
 
 type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
@@ -29,6 +32,8 @@ export default function Discover() {
   const [events, setEvents] = useState<Event[]>([]);
   const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
+  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -226,14 +231,30 @@ export default function Discover() {
               return (
                 <Card
                   key={event.id}
-                  className="group overflow-hidden border-border/50 shadow-card transition-all hover:scale-[1.02] hover:shadow-glow"
+                  className="group overflow-hidden border-border/50 shadow-card transition-all hover:scale-[1.02] hover:shadow-glow cursor-pointer"
+                  onClick={() => {
+                    setSelectedEvent(event);
+                    setIsDetailDialogOpen(true);
+                  }}
                 >
                   <div className="p-6">
+                    {event.image_url && (
+                      <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-muted">
+                        <img
+                          src={event.image_url}
+                          alt={event.title}
+                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
                     <div className="mb-4">
                       <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
                         {event.title}
                       </h3>
-                      <p className="text-sm text-muted-foreground">{event.description}</p>
+                      <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
                     </div>
 
                     <div className="mb-4 space-y-2 text-sm">
@@ -265,7 +286,7 @@ export default function Discover() {
                     </div>
 
                     {/* Attendance Buttons */}
-                    <div className="flex gap-2">
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant={status === "will_attend" ? "default" : "outline"}
                         size="sm"
@@ -303,6 +324,12 @@ export default function Discover() {
             </div>
           )}
         </div>
+
+        <EventDetailDialog
+          event={selectedEvent}
+          open={isDetailDialogOpen}
+          onOpenChange={setIsDetailDialogOpen}
+        />
       </div>
     </AuthGuard>
   );
