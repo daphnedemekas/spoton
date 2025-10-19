@@ -88,6 +88,33 @@ export type Database = {
           },
         ]
       }
+      event_interactions: {
+        Row: {
+          created_at: string
+          event_description: string
+          event_title: string
+          id: string
+          interaction_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_description: string
+          event_title: string
+          id?: string
+          interaction_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_description?: string
+          event_title?: string
+          id?: string
+          interaction_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           created_at: string

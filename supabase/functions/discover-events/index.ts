@@ -36,6 +36,14 @@ serve(async (req) => {
       .select('vibe')
       .eq('user_id', userId);
 
+    // Get interaction history for personalization
+    const { data: interactions } = await supabaseClient
+      .from('event_interactions')
+      .select('event_title, event_description, interaction_type')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(20);
+
     if (!profile || !interests || !vibes) {
       throw new Error('User profile not found');
     }
@@ -43,6 +51,18 @@ serve(async (req) => {
     const userInterests = interests.map(i => i.interest).join(', ');
     const userVibes = vibes.map(v => v.vibe).join(', ');
     const city = profile.city;
+
+    // Build interaction context
+    const savedEvents = interactions?.filter(i => i.interaction_type === 'saved') || [];
+    const removedEvents = interactions?.filter(i => i.interaction_type === 'removed') || [];
+    
+    let interactionContext = '';
+    if (savedEvents.length > 0) {
+      interactionContext += `\n\nEvents the user has SAVED (they liked these):\n${savedEvents.map(e => `- ${e.event_title}: ${e.event_description}`).join('\n')}`;
+    }
+    if (removedEvents.length > 0) {
+      interactionContext += `\n\nEvents the user REMOVED (they didn't like these):\n${removedEvents.map(e => `- ${e.event_title}: ${e.event_description}`).join('\n')}`;
+    }
 
     console.log('Searching for events in:', city);
     console.log('User interests:', userInterests);
@@ -68,7 +88,7 @@ serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with valid URLs and images. Return events in the specified JSON format using the return_events function.`
+            content: `You are an event discovery assistant. Your job is to find REAL upcoming events from actual event sources on the web. Always search for and return events with VALID, WORKING URLs. Return events in the specified JSON format using the return_events function.`
           },
           {
             role: 'user',
@@ -76,8 +96,9 @@ serve(async (req) => {
 
 Search for events matching these interests: ${userInterests}
 And these vibes: ${userVibes}
+${interactionContext}
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL INSTRUCTIONS:
 1. Search the web for REAL events from platforms like:
    - Eventbrite
    - Meetup.com
@@ -85,11 +106,18 @@ IMPORTANT INSTRUCTIONS:
    - Local venue websites
    - City event calendars
 
-2. For EACH event you must provide:
-   - A valid event_link (URL to the actual event page)
+2. For EACH event you MUST provide:
+   - A VALID, WORKING event_link (must be a real URL that goes to an actual event page)
+   - DO NOT use placeholder URLs, example.com, or fake URLs
+   - VERIFY the URL format is correct (starts with https://)
    - All other required fields
 
-3. If you can't find a valid event link, DO NOT include it
+3. If you cannot find a REAL, VALID event link, DO NOT include that event
+
+4. Use the interaction history above to:
+   - Find MORE events similar to ones the user saved
+   - AVOID events similar to ones the user removed
+   - Match the specific themes and descriptions they enjoyed
 
 Return the events using the return_events function with all required fields populated.`
           }
@@ -165,22 +193,27 @@ Return the events using the return_events function with all required fields popu
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Filter and validate events - only insert events with valid links
+    // Filter and validate events - strict URL validation
     const validEvents = eventsData.events.filter((event: any) => {
+      // Validate URL format
       const hasValidLink = event.event_link && 
         typeof event.event_link === 'string' && 
-        event.event_link.startsWith('http');
+        (event.event_link.startsWith('http://') || event.event_link.startsWith('https://')) &&
+        event.event_link.length > 10 && // Must be longer than just "https://"
+        !event.event_link.includes('example.com') && // No placeholder domains
+        !event.event_link.includes('placeholder') &&
+        event.event_link.includes('.'); // Must have a TLD
       
       const hasValidDate = event.date && 
         typeof event.date === 'string' && 
         /^\d{4}-\d{2}-\d{2}$/.test(event.date);
       
       if (!hasValidLink) {
-        console.log(`Skipping event "${event.title}" - missing valid link`);
+        console.log(`Skipping event "${event.title}" - invalid or placeholder link: ${event.event_link}`);
         return false;
       }
       if (!hasValidDate) {
-        console.log(`Skipping event "${event.title}" - invalid date format`);
+        console.log(`Skipping event "${event.title}" - invalid date format: ${event.date}`);
         return false;
       }
       return true;

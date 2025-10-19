@@ -90,34 +90,51 @@ export default function Discover() {
     navigate("/auth");
   };
 
-  const handleAttendanceUpdate = async (eventId: string, newStatus: "saved" | "attended") => {
+  const handleSaveToggle = async (event: Event) => {
     try {
-      const currentStatus = attendanceMap[eventId];
+      const currentStatus = attendanceMap[event.id];
+      const isSaved = currentStatus === "saved";
 
-      if (currentStatus === newStatus) {
-        // Remove attendance if clicking the same status
+      if (isSaved) {
+        // Remove saved status
         await supabase
           .from("event_attendance")
           .delete()
           .eq("user_id", currentUserId)
-          .eq("event_id", eventId);
+          .eq("event_id", event.id);
 
-        setAttendanceMap((prev) => ({ ...prev, [eventId]: null }));
-        toast({ title: "Status removed" });
+        // Track removal
+        await supabase.from("event_interactions").insert({
+          user_id: currentUserId,
+          event_title: event.title,
+          event_description: event.description,
+          interaction_type: "removed",
+        });
+
+        setAttendanceMap((prev) => ({ ...prev, [event.id]: null }));
+        toast({ title: "Removed from saved" });
       } else {
-        // Update or insert attendance
+        // Save event
         const { error } = await supabase
           .from("event_attendance")
           .upsert({
             user_id: currentUserId,
-            event_id: eventId,
-            status: newStatus,
+            event_id: event.id,
+            status: "saved",
           });
 
         if (error) throw error;
 
-        setAttendanceMap((prev) => ({ ...prev, [eventId]: newStatus }));
-        toast({ title: `Marked as ${newStatus === "saved" ? "Saved" : "Attended"}` });
+        // Track save
+        await supabase.from("event_interactions").insert({
+          user_id: currentUserId,
+          event_title: event.title,
+          event_description: event.description,
+          interaction_type: "saved",
+        });
+
+        setAttendanceMap((prev) => ({ ...prev, [event.id]: "saved" }));
+        toast({ title: "Event saved!" });
       }
     } catch (error: any) {
       toast({
@@ -336,25 +353,22 @@ export default function Discover() {
                       </div>
                     </div>
 
-                    {/* Attendance Buttons */}
-                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    {/* Save/Remove Button */}
+                    <div onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant={status === "saved" ? "default" : "outline"}
                         size="sm"
-                        className="flex-1"
-                        onClick={() => handleAttendanceUpdate(event.id, "saved")}
+                        className="w-full"
+                        onClick={() => handleSaveToggle(event)}
                       >
-                        {status === "saved" && <Check className="mr-1 h-4 w-4" />}
-                        Save
-                      </Button>
-                      <Button
-                        variant={status === "attended" ? "default" : "outline"}
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => handleAttendanceUpdate(event.id, "attended")}
-                      >
-                        {status === "attended" && <Check className="mr-1 h-4 w-4" />}
-                        Attended
+                        {status === "saved" ? (
+                          <>
+                            <Check className="mr-1 h-4 w-4" />
+                            Remove
+                          </>
+                        ) : (
+                          "Save"
+                        )}
                       </Button>
                     </div>
                   </div>
