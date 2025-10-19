@@ -535,28 +535,53 @@ Return events using the return_events function.`
       ? JSON.parse(toolCall.function.arguments)
       : toolCall.function.arguments;
 
-    // Helper function to verify URL accessibility (with trusted domain skip)
-    const trustedDomains = [
-      'eventbrite.com', 'sfjazz.org', 'sfmoma.org', 'goldengate.org',
-      'sfbike.org', 'exploratorium.edu', 'asianart.org', 'sfpl.org',
-      'timeout.com', 'ticketmaster.com', 'axs.com', 'universe.com'
-    ];
-    
+    // Helper function to verify URL accessibility
     const verifyUrl = async (url: string): Promise<boolean> => {
       try {
-        // Skip verification for trusted domains
         const urlObj = new URL(url);
-        if (trustedDomains.some(domain => urlObj.hostname.includes(domain))) {
-          console.log(`Trusted domain, skipping verification: ${urlObj.hostname}`);
-          return true;
-        }
         
-        const response = await fetch(url, {
+        // First try HEAD request
+        let response = await fetch(url, {
           method: 'HEAD',
           headers: { 'User-Agent': 'Mozilla/5.0' },
           redirect: 'follow',
           signal: AbortSignal.timeout(5000)
         });
+        
+        // If HEAD fails or returns 404/410, try GET to be sure
+        if (!response.ok || response.status === 404 || response.status === 410) {
+          console.log(`HEAD request failed (${response.status}), trying GET for ${url}`);
+          response = await fetch(url, {
+            method: 'GET',
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            redirect: 'follow',
+            signal: AbortSignal.timeout(5000)
+          });
+        }
+        
+        // Check for common 404 indicators in response
+        if (response.ok) {
+          // Additional check: fetch a bit of content to detect soft 404s
+          const contentType = response.headers.get('content-type') || '';
+          if (contentType.includes('text/html')) {
+            const text = await response.text();
+            const lowerText = text.toLowerCase();
+            
+            // Check for common 404 page indicators
+            const is404Page = 
+              lowerText.includes('page not found') ||
+              lowerText.includes('404 error') ||
+              lowerText.includes('page cannot be found') ||
+              lowerText.includes('page does not exist') ||
+              (lowerText.includes('404') && lowerText.includes('not found'));
+            
+            if (is404Page) {
+              console.log(`Detected 404 page content for ${url}`);
+              return false;
+            }
+          }
+        }
+        
         return response.ok;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
