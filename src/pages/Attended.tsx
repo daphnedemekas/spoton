@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
-import { Settings, Calendar, MapPin, Sparkles, User, ArrowLeft } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, ArrowLeft, MapPinned } from "lucide-react";
 
 type Event = {
   id: string;
@@ -93,7 +93,7 @@ export default function Attended() {
               </Button>
               <div className="flex items-center gap-2">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                  <Sparkles className="h-5 w-5 text-primary-foreground" />
+                  <MapPinned className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
                   SpotOn

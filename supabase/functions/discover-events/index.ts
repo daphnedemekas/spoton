@@ -206,17 +206,31 @@ Return the events using the return_events function.`
       );
     }
 
-    // Clear all old events first
+    // Clear all old events (past events and current batch)
+    const todayDate = new Date();
+    todayDate.setHours(0, 0, 0, 0);
+    
     const { error: deleteError } = await supabaseClient
       .from('events')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Delete all rows
+      .lt('date', todayDate.toISOString().split('T')[0]); // Delete past events
 
     if (deleteError) {
-      console.error('Error deleting old events:', deleteError);
-      // Continue anyway - we still want to insert new events
+      console.error('Error deleting past events:', deleteError);
     } else {
-      console.log('Successfully cleared old events');
+      console.log('Successfully cleared past events');
+    }
+
+    // Also clear all remaining events to replace with new batch
+    const { error: clearError } = await supabaseClient
+      .from('events')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (clearError) {
+      console.error('Error clearing events:', clearError);
+    } else {
+      console.log('Successfully cleared all events for new batch');
     }
 
     // Insert new events into database
