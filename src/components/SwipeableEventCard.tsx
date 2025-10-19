@@ -1,7 +1,7 @@
 import { forwardRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, MapPin, ExternalLink, Info } from "lucide-react";
+import { Calendar, MapPin, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type Event = {
@@ -18,18 +18,10 @@ type Event = {
 
 interface SwipeableEventCardProps {
   event: Event;
-  onOpenDetails: () => void;
 }
 
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
-  ({ event, onOpenDetails }, ref) => {
-    const handleMoreInfo = (e: React.MouseEvent | React.PointerEvent) => {
-      e.stopPropagation();
-      e.preventDefault();
-      console.log('More info clicked for:', event.title);
-      onOpenDetails();
-    };
-
+  ({ event }, ref) => {
     const handleEventLink = (e: React.MouseEvent | React.PointerEvent) => {
       e.stopPropagation();
       e.preventDefault();
@@ -59,7 +51,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
             <div className="flex-1 overflow-y-auto p-5 pb-20">
               <div className="mb-3">
                 <h2 className="mb-2 text-xl font-bold leading-tight">{event.title}</h2>
-                <p className="text-sm text-muted-foreground line-clamp-3 leading-relaxed">
+                <p className="text-sm text-muted-foreground leading-relaxed">
                   {event.description}
                 </p>
               </div>
@@ -94,28 +86,19 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
             </div>
             
             {/* Fixed button bar */}
-            <div className="absolute bottom-0 left-0 right-0 bg-card border-t border-border p-4 flex gap-2 z-50">
-              <Button
-                variant="outline"
-                size="sm"
-                onPointerDown={handleMoreInfo}
-                className="flex-1 gap-2"
-              >
-                <Info className="h-4 w-4" />
-                Info
-              </Button>
-              {event.event_link && (
+            {event.event_link && (
+              <div className="absolute bottom-0 left-0 right-0 bg-card border-t border-border p-4 z-50">
                 <Button
                   variant="outline"
                   size="sm"
                   onPointerDown={handleEventLink}
-                  className="flex-1 gap-2"
+                  className="w-full gap-2"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Link
+                  Event Link
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>

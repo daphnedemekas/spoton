@@ -366,11 +366,6 @@ export default function Discover() {
                     >
                       <SwipeableEventCard
                         event={event}
-                        onOpenDetails={() => {
-                          console.log('Opening details for:', event.title);
-                          setSelectedEvent(event);
-                          setIsDetailDialogOpen(true);
-                        }}
                       />
                     </TinderCard>
                   ))}
