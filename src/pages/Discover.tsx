@@ -151,7 +151,9 @@ export default function Discover() {
   };
 
   const handleSwipe = async (direction: string, event: Event) => {
-    setCurrentIndex(prev => prev + 1);
+    // Immediately remove from local state
+    setAllEvents(prev => prev.filter(e => e.id !== event.id));
+    setCurrentIndex(prev => prev); // Keep same index to show next card
     
     if (direction === "right") {
       await handleSaveEvent(event);
