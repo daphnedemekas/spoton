@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
 import { ScrapingStatusPanel } from "@/components/ScrapingStatusPanel";
-import { Settings, Calendar, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, ExternalLink } from "lucide-react";
+import { SwipeableEventCard } from "@/components/SwipeableEventCard";
+import { Settings, MapPin, Sparkles, User, Search, Bookmark, CheckCircle, Heart, X, RotateCcw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import TinderCard from "react-tinder-card";
 
 type Event = {
   id: string;
@@ -24,23 +24,37 @@ type Event = {
 
 type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
 
+const BATCH_SIZE = 10;
+
 export default function Discover() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [timeFilter, setTimeFilter] = useState<"today" | "this_week">("this_week");
   const [userCity, setUserCity] = useState("");
   const [loading, setLoading] = useState(true);
-  const [events, setEvents] = useState<Event[]>([]);
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
+  const [allEvents, setAllEvents] = useState<Event[]>([]);
+  const [displayedEvents, setDisplayedEvents] = useState<Event[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [scrapedSites, setScrapedSites] = useState<any[]>([]);
   const [showScrapingPanel, setShowScrapingPanel] = useState(false);
+  const [removedTitles, setRemovedTitles] = useState<Set<string>>(new Set());
+  
+  const currentIndexRef = useRef(currentIndex);
+
+  useEffect(() => {
+    currentIndexRef.current = currentIndex;
+  }, [currentIndex]);
 
   useEffect(() => {
     loadData();
   }, []);
+
+  useEffect(() => {
+    loadMoreEvents();
+  }, [allEvents, currentIndex]);
 
   const loadData = async () => {
     try {
@@ -58,12 +72,6 @@ export default function Discover() {
         setUserCity(profile.city);
       }
 
-      // Load events and filter out removed ones
-      const { data: eventsData } = await supabase
-        .from("events")
-        .select("*")
-        .order("date", { ascending: true });
-
       // Get removed events for this user
       const { data: removedInteractions } = await supabase
         .from("event_interactions")
@@ -71,36 +79,40 @@ export default function Discover() {
         .eq("user_id", user.id)
         .eq("interaction_type", "removed");
 
-      // Create set of removed event titles (case-insensitive)
-      const removedTitles = new Set(
+      const removedSet = new Set(
         (removedInteractions || []).map(r => r.event_title.toLowerCase().trim())
       );
+      setRemovedTitles(removedSet);
+
+      // Load events and filter out removed ones
+      const { data: eventsData } = await supabase
+        .from("events")
+        .select("*")
+        .order("date", { ascending: true });
 
       if (eventsData) {
-        // Filter out events that the user has removed
         const filteredEvents = eventsData.filter(event => 
-          !removedTitles.has(event.title.toLowerCase().trim())
+          !removedSet.has(event.title.toLowerCase().trim())
         );
-        setEvents(filteredEvents);
-      }
-
-      // Load user's attendance
-      const { data: attendanceData } = await supabase
-        .from("event_attendance")
-        .select("event_id, status")
-        .eq("user_id", user.id);
-
-      if (attendanceData) {
-        const map: Record<string, AttendanceStatus> = {};
-        attendanceData.forEach((item) => {
-          map[item.event_id] = item.status as AttendanceStatus;
-        });
-        setAttendanceMap(map);
+        setAllEvents(filteredEvents);
       }
     } catch (error) {
       console.error("Error loading data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMoreEvents = () => {
+    if (allEvents.length === 0) return;
+    
+    const remaining = filteredEvents.length - currentIndex;
+    if (remaining < 5 && displayedEvents.length < filteredEvents.length) {
+      const nextBatch = filteredEvents.slice(
+        displayedEvents.length,
+        displayedEvents.length + BATCH_SIZE
+      );
+      setDisplayedEvents(prev => [...prev, ...nextBatch]);
     }
   };
 
@@ -111,17 +123,12 @@ export default function Discover() {
 
   const handleSaveEvent = async (event: Event) => {
     try {
-      const { error } = await supabase
-        .from("event_attendance")
-        .upsert({
-          user_id: currentUserId,
-          event_id: event.id,
-          status: "will_attend", // Changed from "saved" to match DB constraint
-        });
+      await supabase.from("event_attendance").upsert({
+        user_id: currentUserId,
+        event_id: event.id,
+        status: "will_attend",
+      });
 
-      if (error) throw error;
-
-      // Track save
       await supabase.from("event_interactions").insert({
         user_id: currentUserId,
         event_title: event.title,
@@ -129,7 +136,6 @@ export default function Discover() {
         interaction_type: "saved",
       });
 
-      setAttendanceMap((prev) => ({ ...prev, [event.id]: "will_attend" }));
       toast({ title: "Event saved!" });
     } catch (error: any) {
       toast({
@@ -142,14 +148,10 @@ export default function Discover() {
 
   const handleRemoveEvent = async (event: Event) => {
     try {
-      // Remove from attendance
-      await supabase
-        .from("event_attendance")
-        .delete()
+      await supabase.from("event_attendance").delete()
         .eq("user_id", currentUserId)
         .eq("event_id", event.id);
 
-      // Track removal
       await supabase.from("event_interactions").insert({
         user_id: currentUserId,
         event_title: event.title,
@@ -157,11 +159,7 @@ export default function Discover() {
         interaction_type: "removed",
       });
 
-      setAttendanceMap((prev) => ({ ...prev, [event.id]: null }));
-      
-      // Remove from display
-      setEvents((prev) => prev.filter((e) => e.id !== event.id));
-      
+      setRemovedTitles(prev => new Set([...prev, event.title.toLowerCase().trim()]));
       toast({ title: "Event removed" });
     } catch (error: any) {
       toast({
@@ -172,19 +170,41 @@ export default function Discover() {
     }
   };
 
-  const filteredEvents = events.filter((event) => {
-    const eventDate = new Date(event.date);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    if (timeFilter === "today") {
-      return eventDate.toDateString() === today.toDateString();
-    } else {
-      const weekFromNow = new Date(today);
-      weekFromNow.setDate(today.getDate() + 7);
-      return eventDate >= today && eventDate <= weekFromNow;
+  const handleSwipe = async (direction: string, event: Event) => {
+    setCurrentIndex(prev => prev + 1);
+    
+    if (direction === "right") {
+      await handleSaveEvent(event);
+    } else if (direction === "left") {
+      await handleRemoveEvent(event);
     }
-  });
+  };
+
+  const handleUndo = () => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
+  };
+
+  const filteredEvents = useMemo(() => {
+    return allEvents.filter((event) => {
+      const eventDate = new Date(event.date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (timeFilter === "today") {
+        return eventDate.toDateString() === today.toDateString();
+      } else {
+        const weekFromNow = new Date(today);
+        weekFromNow.setDate(today.getDate() + 7);
+        return eventDate >= today && eventDate <= weekFromNow;
+      }
+    });
+  }, [allEvents, timeFilter]);
+
+  const visibleCards = useMemo(() => {
+    return displayedEvents.slice(currentIndex, currentIndex + 3);
+  }, [displayedEvents, currentIndex]);
 
   if (loading) {
     return (
@@ -311,137 +331,96 @@ export default function Discover() {
                 Discover New Events
               </Button>
             </div>
-            <div className="mt-6 flex gap-3">
-              <Button
-                variant={timeFilter === "today" ? "default" : "outline"}
-                onClick={() => setTimeFilter("today")}
-                className="gap-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Today
-              </Button>
-              <Button
-                variant={timeFilter === "this_week" ? "default" : "outline"}
-                onClick={() => setTimeFilter("this_week")}
-                className="gap-2"
-              >
-                <Calendar className="h-4 w-4" />
-                This Week
-              </Button>
-            </div>
           </div>
 
           {/* Scraping Status Panel */}
           <ScrapingStatusPanel sites={scrapedSites} isVisible={showScrapingPanel} />
 
-          {/* Events Grid */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredEvents.map((event) => {
-              const status = attendanceMap[event.id];
-              return (
-                <Card
-                  key={event.id}
-                  className="group overflow-hidden border-border/50 bg-card shadow-card transition-all hover:shadow-hover hover:border-primary/30 cursor-pointer"
-                  onClick={() => {
-                    setSelectedEvent(event);
-                    setIsDetailDialogOpen(true);
-                  }}
-                >
-                  <div className="p-6">
-                    {event.image_url && (
-                      <div className="relative -mx-6 -mt-6 mb-4 aspect-video w-[calc(100%+3rem)] overflow-hidden bg-muted">
-                        <img
-                          src={event.image_url}
-                          alt={event.title}
-                          className="h-full w-full object-cover transition-transform group-hover:scale-105"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      </div>
-                    )}
-                    <div className="mb-4">
-                      <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
-                        {event.title}
-                      </h3>
-                      <p className="text-sm text-muted-foreground line-clamp-2">{event.description}</p>
+          {/* Swipe Cards */}
+          <div className="relative mx-auto max-w-md">
+            <div className="relative h-[600px]">
+              {visibleCards.length > 0 ? (
+                visibleCards.map((event, index) => (
+                  <TinderCard
+                    key={event.id}
+                    onSwipe={(dir) => handleSwipe(dir, event)}
+                    preventSwipe={["up", "down"]}
+                    className="absolute w-full"
+                    swipeRequirementType="position"
+                    swipeThreshold={100}
+                  >
+                    <SwipeableEventCard
+                      event={event}
+                      onOpenDetails={() => {
+                        setSelectedEvent(event);
+                        setIsDetailDialogOpen(true);
+                      }}
+                    />
+                  </TinderCard>
+                ))
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <div className="text-center">
+                    <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+                      <Sparkles className="h-10 w-10 text-muted-foreground" />
                     </div>
-
-                    <div className="mb-4 space-y-2 text-sm">
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <Calendar className="h-4 w-4" />
-                        <span>{new Date(event.date).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex items-center gap-2 text-muted-foreground">
-                        <MapPin className="h-4 w-4" />
-                        <span>{event.location}</span>
-                      </div>
-                    </div>
-
-                    <div className="mb-4 space-y-2">
-                      <div className="flex flex-wrap gap-2">
-                        {event.vibes.map((v) => (
-                          <Badge key={v} variant="secondary" className="text-xs">
-                            {v}
-                          </Badge>
-                        ))}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {event.interests.map((i) => (
-                          <Badge key={i} variant="outline" className="text-xs">
-                            {i}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant={status === "will_attend" ? "default" : "outline"}
-                        size="icon"
-                        onClick={() => handleSaveEvent(event)}
-                        disabled={status === "will_attend"}
-                        className="flex-1"
-                      >
-                        <Heart className={`h-4 w-4 ${status === "will_attend" ? "fill-current" : ""}`} />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={() => handleRemoveEvent(event)}
-                        className="flex-1"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                      {event.event_link && (
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          onClick={() => window.open(event.event_link, '_blank')}
-                          className="flex-1"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </Button>
-                      )}
-                    </div>
+                    <h2 className="mb-2 text-2xl font-semibold">No more events</h2>
+                    <p className="text-muted-foreground mb-4">
+                      Try discovering new events or adjusting your filter
+                    </p>
                   </div>
-                </Card>
-              );
-            })}
-          </div>
-
-          {filteredEvents.length === 0 && (
-            <div className="mt-12 text-center">
-              <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-                <Calendar className="h-10 w-10 text-muted-foreground" />
-              </div>
-              <h2 className="mb-2 text-2xl font-semibold">No events found</h2>
-              <p className="text-muted-foreground">
-                Try adjusting your time filter or check back later
-              </p>
+                </div>
+              )}
             </div>
-          )}
+
+            {/* Action Buttons */}
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-16 w-16 rounded-full border-2"
+                onClick={() => {
+                  const currentEvent = visibleCards[0];
+                  if (currentEvent) {
+                    handleSwipe("left", currentEvent);
+                  }
+                }}
+                disabled={visibleCards.length === 0}
+              >
+                <X className="h-8 w-8 text-destructive" />
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-12 w-12 rounded-full"
+                onClick={handleUndo}
+                disabled={currentIndex === 0}
+              >
+                <RotateCcw className="h-6 w-6" />
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-16 w-16 rounded-full border-2"
+                onClick={() => {
+                  const currentEvent = visibleCards[0];
+                  if (currentEvent) {
+                    handleSwipe("right", currentEvent);
+                  }
+                }}
+                disabled={visibleCards.length === 0}
+              >
+                <Heart className="h-8 w-8 text-primary" />
+              </Button>
+            </div>
+
+            {/* Swipe Instructions */}
+            <div className="mt-6 text-center text-sm text-muted-foreground">
+              <p>Swipe right to save • Swipe left to pass</p>
+            </div>
+          </div>
         </div>
 
         <EventDetailDialog
