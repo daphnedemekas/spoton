@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
-import { Settings, Calendar, MapPin, Sparkles, User, Check, Search } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, Check, Search, Bookmark, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Event = {
@@ -21,7 +21,7 @@ type Event = {
   event_link?: string;
 };
 
-type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
+type AttendanceStatus = "suggested" | "saved" | "attended" | null;
 
 export default function Discover() {
   const navigate = useNavigate();
@@ -90,7 +90,7 @@ export default function Discover() {
     navigate("/auth");
   };
 
-  const handleAttendanceUpdate = async (eventId: string, newStatus: "will_attend" | "attended") => {
+  const handleAttendanceUpdate = async (eventId: string, newStatus: "saved" | "attended") => {
     try {
       const currentStatus = attendanceMap[eventId];
 
@@ -117,7 +117,7 @@ export default function Discover() {
         if (error) throw error;
 
         setAttendanceMap((prev) => ({ ...prev, [eventId]: newStatus }));
-        toast({ title: `Marked as ${newStatus === "will_attend" ? "Will Attend" : "Attended"}` });
+        toast({ title: `Marked as ${newStatus === "saved" ? "Saved" : "Attended"}` });
       }
     } catch (error: any) {
       toast({
@@ -165,6 +165,24 @@ export default function Discover() {
               </span>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/saved")}
+                className="hover:bg-secondary"
+              >
+                <Bookmark className="h-4 w-4 mr-2" />
+                Saved
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate("/attended")}
+                className="hover:bg-secondary"
+              >
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Attended
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -321,13 +339,13 @@ export default function Discover() {
                     {/* Attendance Buttons */}
                     <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                       <Button
-                        variant={status === "will_attend" ? "default" : "outline"}
+                        variant={status === "saved" ? "default" : "outline"}
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleAttendanceUpdate(event.id, "will_attend")}
+                        onClick={() => handleAttendanceUpdate(event.id, "saved")}
                       >
-                        {status === "will_attend" && <Check className="mr-1 h-4 w-4" />}
-                        Will Attend
+                        {status === "saved" && <Check className="mr-1 h-4 w-4" />}
+                        Save
                       </Button>
                       <Button
                         variant={status === "attended" ? "default" : "outline"}
