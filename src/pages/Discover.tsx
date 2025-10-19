@@ -100,10 +100,12 @@ export default function Discover() {
 
   const handleSaveEvent = async (event: Event) => {
     try {
-      const { error } = await supabase.from("event_attendance").insert({
+      const { error } = await supabase.from("event_attendance").upsert({
         user_id: currentUserId,
         event_id: event.id,
         status: "saved",
+      }, {
+        onConflict: 'user_id,event_id'
       });
 
       if (error) throw error;
@@ -347,7 +349,7 @@ export default function Discover() {
 
           {/* Swipe Cards */}
           <div className="relative mx-auto max-w-md">
-            <div className="relative h-[620px] w-full">
+            <div className="relative h-[480px] w-full">
               {visibleCards.length > 0 ? (
                 <>
                   {visibleCards.map((event, index) => (
