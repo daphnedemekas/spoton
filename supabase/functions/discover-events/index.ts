@@ -163,6 +163,94 @@ Return actual scrapable URLs, not just domain names.`
     // Step 2: Scrape the suggested websites
     const allScrapedData: any[] = [];
     
+    // Step 2a: Scrape standard platforms (Eventbrite, Ticketmaster, Eventful)
+    console.log('Scraping standard event platforms...');
+    
+    // Scrape Eventbrite
+    for (const interest of interestsList) {
+      const eventbriteUrl = `https://www.eventbrite.com/d/${city.toLowerCase().replace(/\s+/g, '-')}/events--${interest.toLowerCase().replace(/\s+/g, '-')}/`;
+      console.log('Scraping Eventbrite:', eventbriteUrl);
+      
+      try {
+        const response = await fetch(eventbriteUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: 'eventbrite',
+            interest,
+            url: eventbriteUrl,
+            content: html.substring(0, 50000)
+          });
+          console.log(`Scraped Eventbrite for ${interest}`);
+        }
+      } catch (error) {
+        console.log(`Failed to scrape Eventbrite for ${interest}:`, error);
+      }
+    }
+    
+    // Scrape Ticketmaster
+    for (const interest of interestsList.slice(0, 2)) {
+      const ticketmasterUrl = `https://www.ticketmaster.com/search?q=${encodeURIComponent(interest + ' ' + city)}`;
+      console.log('Scraping Ticketmaster:', ticketmasterUrl);
+      
+      try {
+        const response = await fetch(ticketmasterUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          signal: AbortSignal.timeout(10000)
+        });
+        
+        if (response.ok) {
+          const html = await response.text();
+          allScrapedData.push({
+            source: 'ticketmaster',
+            interest,
+            url: ticketmasterUrl,
+            content: html.substring(0, 50000)
+          });
+          console.log(`Scraped Ticketmaster for ${interest}`);
+        }
+      } catch (error) {
+        console.log(`Failed to scrape Ticketmaster for ${interest}:`, error);
+      }
+    }
+
+    // Scrape Eventful
+    const eventfulUrl = `https://eventful.com/events?l=${encodeURIComponent(city)}`;
+    console.log('Scraping Eventful:', eventfulUrl);
+    
+    try {
+      const response = await fetch(eventfulUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        signal: AbortSignal.timeout(10000)
+      });
+      
+      if (response.ok) {
+        const html = await response.text();
+        allScrapedData.push({
+          source: 'eventful',
+          interest: 'general',
+          url: eventfulUrl,
+          content: html.substring(0, 50000)
+        });
+        console.log('Scraped Eventful');
+      }
+    } catch (error) {
+      console.log('Failed to scrape Eventful:', error);
+    }
+
+    // Step 2b: Scrape Gemini-suggested websites
+    console.log('Scraping Gemini-suggested websites...');
+    
     for (const website of suggestedWebsites.websites) {
       console.log(`Scraping: ${website.url}`);
       
