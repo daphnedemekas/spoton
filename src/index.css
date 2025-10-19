@@ -8,43 +8,48 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 250 100% 98%;
-    --foreground: 260 15% 20%;
+    --background: 220 25% 98%;
+    --foreground: 220 15% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 260 15% 20%;
+    --card-foreground: 220 15% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 260 15% 20%;
+    --popover-foreground: 220 15% 15%;
 
-    --primary: 265 85% 58%;
+    --primary: 262 83% 58%;
     --primary-foreground: 0 0% 100%;
-    --primary-glow: 270 100% 65%;
+    --primary-glow: 270 100% 70%;
 
-    --secondary: 250 60% 96%;
-    --secondary-foreground: 265 85% 58%;
+    --secondary: 280 60% 95%;
+    --secondary-foreground: 262 83% 45%;
 
-    --muted: 250 40% 94%;
-    --muted-foreground: 260 10% 50%;
+    --muted: 220 20% 94%;
+    --muted-foreground: 220 10% 45%;
 
-    --accent: 20 90% 60%;
+    --accent: 340 85% 65%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
+    --success: 142 76% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 250 40% 88%;
-    --input: 250 40% 92%;
-    --ring: 265 85% 58%;
+    --border: 220 20% 90%;
+    --input: 220 20% 93%;
+    --ring: 262 83% 58%;
 
     --radius: 0.75rem;
 
-    --gradient-primary: linear-gradient(135deg, hsl(265 85% 58%), hsl(240 90% 65%));
-    --gradient-accent: linear-gradient(135deg, hsl(20 90% 60%), hsl(340 85% 62%));
-    --gradient-subtle: linear-gradient(180deg, hsl(250 100% 98%), hsl(260 100% 96%));
+    --gradient-primary: linear-gradient(135deg, hsl(262 83% 58%), hsl(280 90% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(340 85% 65%), hsl(20 95% 60%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 25% 98%), hsl(240 30% 96%));
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%), hsl(220 25% 99%));
     
-    --shadow-glow: 0 8px 32px -8px hsl(265 85% 58% / 0.3);
-    --shadow-card: 0 4px 24px -4px hsl(260 15% 20% / 0.08);
+    --shadow-glow: 0 10px 40px -10px hsl(262 83% 58% / 0.25);
+    --shadow-card: 0 4px 20px -4px hsl(220 15% 15% / 0.06);
+    --shadow-hover: 0 8px 30px -8px hsl(262 83% 58% / 0.2);
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -57,41 +62,46 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 260 25% 10%;
-    --foreground: 250 60% 95%;
+    --background: 220 25% 8%;
+    --foreground: 220 15% 92%;
 
-    --card: 260 20% 14%;
-    --card-foreground: 250 60% 95%;
+    --card: 220 20% 12%;
+    --card-foreground: 220 15% 92%;
 
-    --popover: 260 20% 14%;
-    --popover-foreground: 250 60% 95%;
+    --popover: 220 20% 12%;
+    --popover-foreground: 220 15% 92%;
 
-    --primary: 270 100% 65%;
-    --primary-foreground: 260 25% 10%;
-    --primary-glow: 265 85% 58%;
+    --primary: 270 100% 68%;
+    --primary-foreground: 220 25% 8%;
+    --primary-glow: 280 100% 75%;
 
-    --secondary: 260 18% 20%;
-    --secondary-foreground: 270 100% 65%;
+    --secondary: 220 18% 18%;
+    --secondary-foreground: 270 100% 68%;
 
-    --muted: 260 15% 18%;
-    --muted-foreground: 250 20% 65%;
+    --muted: 220 15% 16%;
+    --muted-foreground: 220 15% 65%;
 
-    --accent: 20 90% 60%;
+    --accent: 340 85% 65%;
     --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 250 60% 95%;
+    --success: 142 76% 45%;
+    --success-foreground: 0 0% 100%;
 
-    --border: 260 15% 22%;
-    --input: 260 15% 22%;
-    --ring: 270 100% 65%;
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 220 15% 92%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(270 100% 65%), hsl(240 90% 65%));
-    --gradient-accent: linear-gradient(135deg, hsl(20 90% 60%), hsl(340 85% 62%));
-    --gradient-subtle: linear-gradient(180deg, hsl(260 25% 10%), hsl(260 20% 14%));
+    --border: 220 15% 20%;
+    --input: 220 15% 20%;
+    --ring: 270 100% 68%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(270 100% 68%), hsl(280 90% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(340 85% 65%), hsl(20 95% 60%));
+    --gradient-subtle: linear-gradient(180deg, hsl(220 25% 8%), hsl(220 20% 12%));
+    --gradient-card: linear-gradient(135deg, hsl(220 20% 12%), hsl(220 18% 14%));
     
-    --shadow-glow: 0 8px 32px -8px hsl(270 100% 65% / 0.4);
-    --shadow-card: 0 4px 24px -4px hsl(0 0% 0% / 0.3);
+    --shadow-glow: 0 10px 40px -10px hsl(270 100% 68% / 0.3);
+    --shadow-card: 0 4px 20px -4px hsl(0 0% 0% / 0.25);
+    --shadow-hover: 0 8px 30px -8px hsl(270 100% 68% / 0.25);
 
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
