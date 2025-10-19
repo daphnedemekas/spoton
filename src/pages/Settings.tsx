@@ -7,10 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Sparkles } from "lucide-react";
+import { ArrowLeft, Sparkles, Plus } from "lucide-react";
+import { INTEREST_CATEGORIES, VIBE_CATEGORIES, getAllInterests, getAllVibes } from "@/lib/categories";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
-const PRESET_INTERESTS = ["Sports", "Meditation", "Yoga", "Arts", "Music"];
-const PRESET_VIBES = ["Epic", "Peaceful", "Exciting", "Unique", "Recurring"];
 const EMAIL_FREQUENCIES = [
   { value: "daily", label: "Every Day" },
   { value: "every_other_day", label: "Every Other Day" },
@@ -104,6 +109,9 @@ export default function Settings() {
     }
   };
 
+  const allPresetInterests = getAllInterests();
+  const allPresetVibes = getAllVibes();
+
   const handleSave = async () => {
     if (selectedInterests.length === 0 || selectedVibes.length === 0) {
       toast({
@@ -127,7 +135,7 @@ export default function Settings() {
         supabase.from("user_interests").insert({
           user_id: user.id,
           interest,
-          is_custom: !PRESET_INTERESTS.includes(interest),
+          is_custom: !allPresetInterests.includes(interest),
         })
       );
       await Promise.all(interestPromises);
@@ -138,7 +146,7 @@ export default function Settings() {
         supabase.from("user_vibes").insert({
           user_id: user.id,
           vibe,
-          is_custom: !PRESET_VIBES.includes(vibe),
+          is_custom: !allPresetVibes.includes(vibe),
         })
       );
       await Promise.all(vibePromises);
@@ -191,7 +199,7 @@ export default function Settings() {
         </header>
 
         <div className="container mx-auto px-4 py-8">
-          <div className="mx-auto max-w-2xl">
+          <div className="mx-auto max-w-4xl">
             <div className="space-y-8 rounded-2xl bg-card p-8 shadow-card">
               {/* City */}
               <div className="space-y-2">
@@ -207,19 +215,40 @@ export default function Settings() {
 
               {/* Interests */}
               <div className="space-y-4">
-                <Label>Interests</Label>
-                <div className="flex flex-wrap gap-2">
-                  {PRESET_INTERESTS.map((interest) => (
-                    <Badge
-                      key={interest}
-                      variant={selectedInterests.includes(interest) ? "default" : "outline"}
-                      className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
-                      onClick={() => toggleInterest(interest)}
-                    >
-                      {interest}
-                    </Badge>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <Label>Interests ({selectedInterests.length} selected)</Label>
                 </div>
+                
+                <Accordion type="multiple" className="w-full">
+                  {INTEREST_CATEGORIES.map((category) => {
+                    const Icon = category.icon;
+                    return (
+                      <AccordionItem key={category.name} value={category.name}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-5 w-5 text-primary" />
+                            <span className="font-semibold">{category.name}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {category.items.map((interest) => (
+                              <Badge
+                                key={interest}
+                                variant={selectedInterests.includes(interest) ? "default" : "outline"}
+                                className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
+                                onClick={() => toggleInterest(interest)}
+                              >
+                                {interest}
+                              </Badge>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+
                 <div className="flex gap-2">
                   <Input
                     placeholder="Add custom interest"
@@ -227,37 +256,62 @@ export default function Settings() {
                     onChange={(e) => setCustomInterest(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addCustomInterest())}
                   />
-                  <Button type="button" onClick={addCustomInterest} variant="outline">
-                    Add
+                  <Button type="button" onClick={addCustomInterest} variant="outline" size="icon">
+                    <Plus className="h-4 w-4" />
                   </Button>
                 </div>
-                {selectedInterests.filter((i) => !PRESET_INTERESTS.includes(i)).map((interest) => (
-                  <Badge
-                    key={interest}
-                    variant="default"
-                    className="mr-2 cursor-pointer"
-                    onClick={() => toggleInterest(interest)}
-                  >
-                    {interest} ✕
-                  </Badge>
-                ))}
+                {selectedInterests.filter((i) => !allPresetInterests.includes(i)).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedInterests.filter((i) => !allPresetInterests.includes(i)).map((interest) => (
+                      <Badge
+                        key={interest}
+                        variant="default"
+                        className="cursor-pointer"
+                        onClick={() => toggleInterest(interest)}
+                      >
+                        {interest} ✕
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Vibes */}
               <div className="space-y-4">
-                <Label>Vibes</Label>
-                <div className="flex flex-wrap gap-2">
-                  {PRESET_VIBES.map((vibe) => (
-                    <Badge
-                      key={vibe}
-                      variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                      className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
-                      onClick={() => toggleVibe(vibe)}
-                    >
-                      {vibe}
-                    </Badge>
-                  ))}
+                <div className="flex items-center justify-between">
+                  <Label>Vibes ({selectedVibes.length} selected)</Label>
                 </div>
+                
+                <Accordion type="multiple" className="w-full">
+                  {VIBE_CATEGORIES.map((category) => {
+                    const Icon = category.icon;
+                    return (
+                      <AccordionItem key={category.name} value={category.name}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center gap-2">
+                            <Icon className="h-5 w-5 text-accent" />
+                            <span className="font-semibold">{category.name}</span>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="flex flex-wrap gap-2 pt-2">
+                            {category.items.map((vibe) => (
+                              <Badge
+                                key={vibe}
+                                variant={selectedVibes.includes(vibe) ? "default" : "outline"}
+                                className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
+                                onClick={() => toggleVibe(vibe)}
+                              >
+                                {vibe}
+                              </Badge>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+
                 <div className="flex gap-2">
                   <Input
                     placeholder="Add custom vibe"
@@ -265,20 +319,24 @@ export default function Settings() {
                     onChange={(e) => setCustomVibe(e.target.value)}
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addCustomVibe())}
                   />
-                  <Button type="button" onClick={addCustomVibe} variant="outline">
-                    Add
+                  <Button type="button" onClick={addCustomVibe} variant="outline" size="icon">
+                    <Plus className="h-4 w-4" />
                   </Button>
                 </div>
-                {selectedVibes.filter((v) => !PRESET_VIBES.includes(v)).map((vibe) => (
-                  <Badge
-                    key={vibe}
-                    variant="default"
-                    className="mr-2 cursor-pointer"
-                    onClick={() => toggleVibe(vibe)}
-                  >
-                    {vibe} ✕
-                  </Badge>
-                ))}
+                {selectedVibes.filter((v) => !allPresetVibes.includes(v)).length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {selectedVibes.filter((v) => !allPresetVibes.includes(v)).map((vibe) => (
+                      <Badge
+                        key={vibe}
+                        variant="default"
+                        className="cursor-pointer"
+                        onClick={() => toggleVibe(vibe)}
+                      >
+                        {vibe} ✕
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Email Frequency */}
