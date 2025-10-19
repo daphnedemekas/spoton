@@ -58,14 +58,30 @@ export default function Discover() {
         setUserCity(profile.city);
       }
 
-      // Load events
+      // Load events and filter out removed ones
       const { data: eventsData } = await supabase
         .from("events")
         .select("*")
         .order("date", { ascending: true });
 
+      // Get removed events for this user
+      const { data: removedInteractions } = await supabase
+        .from("event_interactions")
+        .select("event_title")
+        .eq("user_id", user.id)
+        .eq("interaction_type", "removed");
+
+      // Create set of removed event titles (case-insensitive)
+      const removedTitles = new Set(
+        (removedInteractions || []).map(r => r.event_title.toLowerCase().trim())
+      );
+
       if (eventsData) {
-        setEvents(eventsData);
+        // Filter out events that the user has removed
+        const filteredEvents = eventsData.filter(event => 
+          !removedTitles.has(event.title.toLowerCase().trim())
+        );
+        setEvents(filteredEvents);
       }
 
       // Load user's attendance
