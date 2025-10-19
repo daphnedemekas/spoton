@@ -21,12 +21,26 @@ export default function Auth() {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: { user }, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
-        navigate("/onboarding");
+        
+        // Check if user has completed onboarding
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("id", user.id)
+            .maybeSingle();
+          
+          if (profile) {
+            navigate("/discover");
+          } else {
+            navigate("/onboarding");
+          }
+        }
       } else {
         const { error } = await supabase.auth.signUp({
           email,

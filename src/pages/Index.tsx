@@ -18,7 +18,7 @@ export default function Index() {
         .from("profiles")
         .select("id")
         .eq("id", session.user.id)
-        .single();
+        .maybeSingle();
 
       if (profile) {
         navigate("/discover");
