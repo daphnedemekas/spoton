@@ -46,6 +46,81 @@ export type Database = {
           },
         ]
       }
+      event_attendance: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          status: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_attendance_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_attendance_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          date: string
+          description: string
+          id: string
+          interests: string[]
+          location: string
+          title: string
+          vibes: string[]
+        }
+        Insert: {
+          created_at?: string
+          date: string
+          description: string
+          id?: string
+          interests: string[]
+          location: string
+          title: string
+          vibes: string[]
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          description?: string
+          id?: string
+          interests?: string[]
+          location?: string
+          title?: string
+          vibes?: string[]
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           city: string

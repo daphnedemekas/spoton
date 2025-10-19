@@ -8,6 +8,8 @@ import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Discover from "./pages/Discover";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
+import UserSearch from "./pages/UserSearch";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +26,8 @@ const App = () => (
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/discover" element={<Discover />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/profile/:userId" element={<Profile />} />
+          <Route path="/search" element={<UserSearch />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

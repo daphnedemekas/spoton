@@ -5,71 +5,40 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
-import { Settings, Calendar, MapPin, Sparkles } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, Check, Search } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
-// Mock event data for demonstration
-const MOCK_EVENTS = [
-  {
-    id: "1",
-    title: "Sunset Yoga in the Park",
-    description: "Join us for a peaceful outdoor yoga session as the sun sets",
-    date: "2025-10-20",
-    location: "Golden Gate Park",
-    vibe: ["Peaceful", "Recurring"],
-    interests: ["Yoga", "Meditation"],
-  },
-  {
-    id: "2",
-    title: "Live Jazz Night",
-    description: "Experience incredible live jazz performances from local artists",
-    date: "2025-10-19",
-    location: "The Blue Note",
-    vibe: ["Epic", "Exciting"],
-    interests: ["Music"],
-  },
-  {
-    id: "3",
-    title: "Art Gallery Opening",
-    description: "Discover new contemporary art at this exclusive gallery opening",
-    date: "2025-10-21",
-    location: "SFMOMA",
-    vibe: ["Unique", "Exciting"],
-    interests: ["Arts"],
-  },
-  {
-    id: "4",
-    title: "Community Basketball Tournament",
-    description: "Watch or participate in friendly basketball games",
-    date: "2025-10-19",
-    location: "Mission Recreation Center",
-    vibe: ["Epic", "Recurring"],
-    interests: ["Sports"],
-  },
-  {
-    id: "5",
-    title: "Guided Meditation Workshop",
-    description: "Learn mindfulness techniques in this beginner-friendly workshop",
-    date: "2025-10-22",
-    location: "Zen Center",
-    vibe: ["Peaceful"],
-    interests: ["Meditation"],
-  },
-];
+type Event = {
+  id: string;
+  title: string;
+  description: string;
+  date: string;
+  location: string;
+  vibes: string[];
+  interests: string[];
+};
+
+type AttendanceStatus = "suggested" | "will_attend" | "attended" | null;
 
 export default function Discover() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [timeFilter, setTimeFilter] = useState<"today" | "this_week">("this_week");
   const [userCity, setUserCity] = useState("");
   const [loading, setLoading] = useState(true);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
+  const [currentUserId, setCurrentUserId] = useState<string>("");
 
   useEffect(() => {
-    loadUserProfile();
+    loadData();
   }, []);
 
-  const loadUserProfile = async () => {
+  const loadData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setCurrentUserId(user.id);
 
       const { data: profile } = await supabase
         .from("profiles")
@@ -80,8 +49,32 @@ export default function Discover() {
       if (profile) {
         setUserCity(profile.city);
       }
+
+      // Load events
+      const { data: eventsData } = await supabase
+        .from("events")
+        .select("*")
+        .order("date", { ascending: true });
+
+      if (eventsData) {
+        setEvents(eventsData);
+      }
+
+      // Load user's attendance
+      const { data: attendanceData } = await supabase
+        .from("event_attendance")
+        .select("event_id, status")
+        .eq("user_id", user.id);
+
+      if (attendanceData) {
+        const map: Record<string, AttendanceStatus> = {};
+        attendanceData.forEach((item) => {
+          map[item.event_id] = item.status as AttendanceStatus;
+        });
+        setAttendanceMap(map);
+      }
     } catch (error) {
-      console.error("Error loading profile:", error);
+      console.error("Error loading data:", error);
     } finally {
       setLoading(false);
     }
@@ -92,7 +85,45 @@ export default function Discover() {
     navigate("/auth");
   };
 
-  const filteredEvents = MOCK_EVENTS.filter((event) => {
+  const handleAttendanceUpdate = async (eventId: string, newStatus: "will_attend" | "attended") => {
+    try {
+      const currentStatus = attendanceMap[eventId];
+
+      if (currentStatus === newStatus) {
+        // Remove attendance if clicking the same status
+        await supabase
+          .from("event_attendance")
+          .delete()
+          .eq("user_id", currentUserId)
+          .eq("event_id", eventId);
+
+        setAttendanceMap((prev) => ({ ...prev, [eventId]: null }));
+        toast({ title: "Status removed" });
+      } else {
+        // Update or insert attendance
+        const { error } = await supabase
+          .from("event_attendance")
+          .upsert({
+            user_id: currentUserId,
+            event_id: eventId,
+            status: newStatus,
+          });
+
+        if (error) throw error;
+
+        setAttendanceMap((prev) => ({ ...prev, [eventId]: newStatus }));
+        toast({ title: `Marked as ${newStatus === "will_attend" ? "Will Attend" : "Attended"}` });
+      }
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const filteredEvents = events.filter((event) => {
     const eventDate = new Date(event.date);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -129,6 +160,22 @@ export default function Discover() {
               </span>
             </div>
             <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/search")}
+                className="hover:bg-secondary"
+              >
+                <Search className="h-5 w-5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate(`/profile/${currentUserId}`)}
+                className="hover:bg-secondary"
+              >
+                <User className="h-5 w-5" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -174,49 +221,74 @@ export default function Discover() {
 
           {/* Events Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredEvents.map((event) => (
-              <Card
-                key={event.id}
-                className="group overflow-hidden border-border/50 shadow-card transition-all hover:scale-[1.02] hover:shadow-glow"
-              >
-                <div className="p-6">
-                  <div className="mb-4">
-                    <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
-                      {event.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{event.description}</p>
-                  </div>
+            {filteredEvents.map((event) => {
+              const status = attendanceMap[event.id];
+              return (
+                <Card
+                  key={event.id}
+                  className="group overflow-hidden border-border/50 shadow-card transition-all hover:scale-[1.02] hover:shadow-glow"
+                >
+                  <div className="p-6">
+                    <div className="mb-4">
+                      <h3 className="mb-2 text-xl font-semibold group-hover:text-primary transition-colors">
+                        {event.title}
+                      </h3>
+                      <p className="text-sm text-muted-foreground">{event.description}</p>
+                    </div>
 
-                  <div className="mb-4 space-y-2 text-sm">
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Calendar className="h-4 w-4" />
-                      <span>{new Date(event.date).toLocaleDateString()}</span>
+                    <div className="mb-4 space-y-2 text-sm">
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>{new Date(event.date).toLocaleDateString()}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        <span>{event.location}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <MapPin className="h-4 w-4" />
-                      <span>{event.location}</span>
-                    </div>
-                  </div>
 
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {event.vibe.map((v) => (
-                        <Badge key={v} variant="secondary" className="text-xs">
-                          {v}
-                        </Badge>
-                      ))}
+                    <div className="mb-4 space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {event.vibes.map((v) => (
+                          <Badge key={v} variant="secondary" className="text-xs">
+                            {v}
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {event.interests.map((i) => (
+                          <Badge key={i} variant="outline" className="text-xs">
+                            {i}
+                          </Badge>
+                        ))}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {event.interests.map((i) => (
-                        <Badge key={i} variant="outline" className="text-xs">
-                          {i}
-                        </Badge>
-                      ))}
+
+                    {/* Attendance Buttons */}
+                    <div className="flex gap-2">
+                      <Button
+                        variant={status === "will_attend" ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleAttendanceUpdate(event.id, "will_attend")}
+                      >
+                        {status === "will_attend" && <Check className="mr-1 h-4 w-4" />}
+                        Will Attend
+                      </Button>
+                      <Button
+                        variant={status === "attended" ? "default" : "outline"}
+                        size="sm"
+                        className="flex-1"
+                        onClick={() => handleAttendanceUpdate(event.id, "attended")}
+                      >
+                        {status === "attended" && <Check className="mr-1 h-4 w-4" />}
+                        Attended
+                      </Button>
                     </div>
                   </div>
-                </div>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
 
           {filteredEvents.length === 0 && (
