@@ -12,6 +12,8 @@ type Profile = {
   id: string;
   email: string;
   city: string;
+  first_name: string | null;
+  last_name: string | null;
 };
 
 type Event = {
@@ -99,7 +101,7 @@ export default function Profile() {
           )
         `)
         .eq("user_id", userId)
-        .in("status", ["will_attend", "attended"]);
+        .in("status", ["saved", "attended"]);
 
       if (attendanceData) {
         const willAttend: Event[] = [];
@@ -107,7 +109,7 @@ export default function Profile() {
 
         attendanceData.forEach((item: any) => {
           if (item.events) {
-            if (item.status === "will_attend") {
+            if (item.status === "saved") {
               willAttend.push(item.events);
             } else if (item.status === "attended") {
               attended.push(item.events);
@@ -211,7 +213,12 @@ export default function Profile() {
           <div className="mb-8 rounded-2xl bg-card p-8 shadow-card">
             <div className="mb-6">
               <div className="mb-2 flex items-center gap-2">
-                <h1 className="text-3xl font-bold">{profile.email.split("@")[0]}</h1>
+                <h1 className="text-3xl font-bold">
+                  {profile.first_name && profile.last_name
+                    ? `${profile.first_name} ${profile.last_name}`
+                    : profile.email.split("@")[0]
+                  }
+                </h1>
               </div>
               <div className="flex items-center gap-2 text-muted-foreground">
                 <MapPin className="h-4 w-4" />
@@ -246,11 +253,11 @@ export default function Profile() {
           </div>
 
           {/* Events Tabs */}
-          <Tabs defaultValue="will_attend" className="w-full">
+          <Tabs defaultValue="saved" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="will_attend" className="gap-2">
+              <TabsTrigger value="saved" className="gap-2">
                 <Heart className="h-4 w-4" />
-                Will Attend ({willAttendEvents.length})
+                Saved ({willAttendEvents.length})
               </TabsTrigger>
               <TabsTrigger value="attended" className="gap-2">
                 <CheckCircle className="h-4 w-4" />
@@ -258,7 +265,7 @@ export default function Profile() {
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="will_attend" className="mt-6">
+            <TabsContent value="saved" className="mt-6">
               {willAttendEvents.length > 0 ? (
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {willAttendEvents.map((event) => (
@@ -267,7 +274,7 @@ export default function Profile() {
                 </div>
               ) : (
                 <div className="py-12 text-center text-muted-foreground">
-                  No upcoming events marked as "Will Attend"
+                  No saved events
                 </div>
               )}
             </TabsContent>

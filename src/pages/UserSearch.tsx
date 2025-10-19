@@ -12,6 +12,8 @@ type UserProfile = {
   id: string;
   email: string;
   city: string;
+  first_name: string | null;
+  last_name: string | null;
 };
 
 export default function UserSearch() {
@@ -27,8 +29,8 @@ export default function UserSearch() {
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("id, email, city")
-        .or(`email.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%`)
+        .select("id, email, city, first_name, last_name")
+        .or(`first_name.ilike.%${searchQuery}%,last_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%,city.ilike.%${searchQuery}%`)
         .limit(20);
 
       if (data) {
@@ -72,7 +74,7 @@ export default function UserSearch() {
             <h1 className="mb-6 text-4xl font-bold">Search for People</h1>
             <div className="flex gap-2">
               <Input
-                placeholder="Search by email or city..."
+                placeholder="Search by name, email or city..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSearch()}
@@ -98,10 +100,13 @@ export default function UserSearch() {
                 onClick={() => navigate(`/profile/${profile.id}`)}
               >
                 <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="mb-2 text-xl font-semibold">
-                      {profile.email.split("@")[0]}
-                    </h3>
+                <div>
+                  <h3 className="mb-2 text-xl font-semibold">
+                    {profile.first_name && profile.last_name 
+                      ? `${profile.first_name} ${profile.last_name}`
+                      : profile.email.split("@")[0]
+                    }
+                  </h3>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <MapPin className="h-4 w-4" />
                       <span>{profile.city}</span>

@@ -27,6 +27,8 @@ export default function Onboarding() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
 
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [city, setCity] = useState("");
   const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
   const [customInterest, setCustomInterest] = useState("");
@@ -94,6 +96,8 @@ export default function Onboarding() {
       const { error: profileError } = await supabase.from("profiles").insert({
         id: user.id,
         email: user.email!,
+        first_name: firstName,
+        last_name: lastName,
         city,
       });
       if (profileError) throw profileError;
@@ -158,6 +162,32 @@ export default function Onboarding() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-8 rounded-2xl bg-card p-8 shadow-card">
+            {/* Name */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  placeholder="e.g., John"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  required
+                  className="h-12"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  placeholder="e.g., Doe"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  required
+                  className="h-12"
+                />
+              </div>
+            </div>
+
             {/* City */}
             <div className="space-y-2">
               <Label htmlFor="city">What city do you live in?</Label>
