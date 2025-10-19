@@ -61,7 +61,7 @@ export default function Auth() {
             <Sparkles className="h-8 w-8 text-primary-foreground" />
           </div>
           <h1 className="mb-2 text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-            Vibe Finder
+            SpotOn
           </h1>
           <p className="text-muted-foreground">
             Discover events that match your energy
