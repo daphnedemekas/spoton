@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AuthGuard } from "@/components/AuthGuard";
-import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle } from "lucide-react";
+import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings } from "lucide-react";
 
 type Profile = {
   id: string;
@@ -197,7 +197,7 @@ export default function Profile() {
             >
               <ArrowLeft className="h-5 w-5" />
             </Button>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
                 <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
@@ -205,6 +205,17 @@ export default function Profile() {
                 {isOwnProfile ? "My Profile" : "User Profile"}
               </span>
             </div>
+            {isOwnProfile && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate("/settings")}
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Settings
+              </Button>
+            )}
           </div>
         </header>
 
