@@ -67,13 +67,23 @@ export default function Discover() {
         setUserCity(profile.city);
       }
 
+      // Get user's event interactions to filter them out
+      const { data: attendanceData } = await supabase
+        .from("event_attendance")
+        .select("event_id")
+        .eq("user_id", user.id);
+
+      const interactedEventIds = new Set(attendanceData?.map(a => a.event_id) || []);
+
       const { data: eventsData } = await supabase
         .from("events")
         .select("*")
         .order("date", { ascending: true });
 
       if (eventsData) {
-        setAllEvents(eventsData);
+        // Filter out events the user has already interacted with
+        const uninteractedEvents = eventsData.filter(event => !interactedEventIds.has(event.id));
+        setAllEvents(uninteractedEvents);
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -90,11 +100,13 @@ export default function Discover() {
 
   const handleSaveEvent = async (event: Event) => {
     try {
-      await supabase.from("event_attendance").upsert({
+      const { error } = await supabase.from("event_attendance").insert({
         user_id: currentUserId,
         event_id: event.id,
-        status: "will_attend",
+        status: "saved",
       });
+
+      if (error) throw error;
 
       await supabase.from("event_interactions").insert({
         user_id: currentUserId,
