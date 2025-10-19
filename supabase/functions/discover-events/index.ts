@@ -273,8 +273,11 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
               const results = braveData.web?.results || [];
               
               for (const result of results) {
-                // Filter for actual event listing pages
-                if (result.url && !result.url.includes('facebook.com') && !result.url.includes('twitter.com')) {
+                // Filter out social media, Meetup, and other unwanted sites
+                const excludedDomains = ['facebook.com', 'twitter.com', 'meetup.com', 'instagram.com'];
+                const isExcluded = excludedDomains.some(domain => result.url.includes(domain));
+                
+                if (result.url && !isExcluded) {
                   braveWebsites.push({
                     url: result.url,
                     source: `Brave: ${result.title?.substring(0, 30) || 'Event Site'}`,
@@ -304,9 +307,9 @@ Return actual scrapable URLs that would list current/upcoming activities, not ju
       new Map(allAvailableWebsites.map(w => [w.url, w])).values()
     );
     
-    // Shuffle and take up to 30 websites (more coverage per interest)
+    // Shuffle and take up to 40 websites (more coverage = more events)
     const shuffled = uniqueWebsites.sort(() => Math.random() - 0.5);
-    const allWebsites = shuffled.slice(0, 30);
+    const allWebsites = shuffled.slice(0, 40);
     
     console.log(`Selected ${allWebsites.length} random websites from ${uniqueWebsites.length} unique sites (${allAvailableWebsites.length} total with duplicates)`);
 
@@ -409,7 +412,7 @@ HTML Content:
 ${data.content}
 ---`).join('\n\n')}
 
-Extract 15-20 unique upcoming events happening between ${today} and ${nextWeek}. ${extractionPrompt}
+Extract 30-40 unique upcoming events happening between ${today} and ${nextWeek}. ${extractionPrompt}
 
 User preferences:
 - Interests: ${userInterests}
