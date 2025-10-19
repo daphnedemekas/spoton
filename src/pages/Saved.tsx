@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { AuthGuard } from "@/components/AuthGuard";
 import { EventDetailDialog } from "@/components/EventDetailDialog";
-import { Settings, Calendar, MapPin, Sparkles, User, Check, Search } from "lucide-react";
+import { Settings, Calendar, MapPin, Sparkles, User, ArrowLeft, X, Check } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 type Event = {
@@ -21,104 +21,65 @@ type Event = {
   event_link?: string;
 };
 
-type AttendanceStatus = "suggested" | "saved" | "attended" | null;
-
-export default function Discover() {
+export default function Saved() {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [timeFilter, setTimeFilter] = useState<"today" | "this_week">("this_week");
-  const [userCity, setUserCity] = useState("");
   const [loading, setLoading] = useState(true);
   const [events, setEvents] = useState<Event[]>([]);
-  const [attendanceMap, setAttendanceMap] = useState<Record<string, AttendanceStatus>>({});
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
 
   useEffect(() => {
-    loadData();
+    loadSavedEvents();
   }, []);
 
-  const loadData = async () => {
+  const loadSavedEvents = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
       setCurrentUserId(user.id);
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("city")
-        .eq("id", user.id)
-        .single();
+      // Get saved events
+      const { data: savedEventIds } = await supabase
+        .from("event_attendance")
+        .select("event_id")
+        .eq("user_id", user.id)
+        .eq("status", "saved");
 
-      if (profile) {
-        setUserCity(profile.city);
+      if (!savedEventIds || savedEventIds.length === 0) {
+        setEvents([]);
+        return;
       }
 
-      // Load events
+      const eventIds = savedEventIds.map(item => item.event_id);
+
       const { data: eventsData } = await supabase
         .from("events")
         .select("*")
+        .in("id", eventIds)
         .order("date", { ascending: true });
 
       if (eventsData) {
         setEvents(eventsData);
       }
-
-      // Load user's attendance
-      const { data: attendanceData } = await supabase
-        .from("event_attendance")
-        .select("event_id, status")
-        .eq("user_id", user.id);
-
-      if (attendanceData) {
-        const map: Record<string, AttendanceStatus> = {};
-        attendanceData.forEach((item) => {
-          map[item.event_id] = item.status as AttendanceStatus;
-        });
-        setAttendanceMap(map);
-      }
     } catch (error) {
-      console.error("Error loading data:", error);
+      console.error("Error loading saved events:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
-  const handleSaveEvent = async (eventId: string) => {
+  const handleRemove = async (eventId: string) => {
     try {
-      const currentStatus = attendanceMap[eventId];
+      await supabase
+        .from("event_attendance")
+        .delete()
+        .eq("user_id", currentUserId)
+        .eq("event_id", eventId);
 
-      if (currentStatus === "saved") {
-        // Remove save if already saved
-        await supabase
-          .from("event_attendance")
-          .delete()
-          .eq("user_id", currentUserId)
-          .eq("event_id", eventId);
-
-        setAttendanceMap((prev) => ({ ...prev, [eventId]: null }));
-        toast({ title: "Removed from saved" });
-      } else {
-        // Save event
-        const { error } = await supabase
-          .from("event_attendance")
-          .upsert({
-            user_id: currentUserId,
-            event_id: eventId,
-            status: "saved",
-          });
-
-        if (error) throw error;
-
-        setAttendanceMap((prev) => ({ ...prev, [eventId]: "saved" }));
-        toast({ title: "Event saved!" });
-      }
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      toast({ title: "Removed from saved" });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -128,19 +89,33 @@ export default function Discover() {
     }
   };
 
-  const filteredEvents = events.filter((event) => {
-    const eventDate = new Date(event.date);
+  const handleMarkAttended = async (eventId: string) => {
+    try {
+      const { error } = await supabase
+        .from("event_attendance")
+        .update({ status: "attended" })
+        .eq("user_id", currentUserId)
+        .eq("event_id", eventId);
+
+      if (error) throw error;
+
+      setEvents(prev => prev.filter(e => e.id !== eventId));
+      toast({ title: "Marked as attended!" });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+
+  const isEventPast = (eventDate: string) => {
+    const date = new Date(eventDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    if (timeFilter === "today") {
-      return eventDate.toDateString() === today.toDateString();
-    } else {
-      const weekFromNow = new Date(today);
-      weekFromNow.setDate(today.getDate() + 7);
-      return eventDate >= today && eventDate <= weekFromNow;
-    }
-  });
+    return date < today;
+  };
 
   if (loading) {
     return (
@@ -156,31 +131,25 @@ export default function Discover() {
         {/* Header */}
         <header className="border-b border-border/50 bg-card/50 backdrop-blur-sm">
           <div className="container mx-auto flex items-center justify-between px-4 py-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
-                SpotOn
-              </span>
-            </div>
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => navigate("/saved")}
+                onClick={() => navigate("/discover")}
                 className="hover:bg-secondary"
               >
-                <Calendar className="h-5 w-5" />
+                <ArrowLeft className="h-5 w-5" />
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/search")}
-                className="hover:bg-secondary"
-              >
-                <Search className="h-5 w-5" />
-              </Button>
+              <div className="flex items-center gap-2">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-primary shadow-glow">
+                  <Sparkles className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <span className="text-xl font-bold bg-gradient-primary bg-clip-text text-transparent">
+                  SpotOn
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
@@ -197,78 +166,22 @@ export default function Discover() {
               >
                 <Settings className="h-5 w-5" />
               </Button>
-              <Button variant="outline" onClick={handleSignOut}>
-                Sign Out
-              </Button>
             </div>
           </div>
         </header>
 
         <div className="container mx-auto px-4 py-8">
-          {/* Filter Section */}
           <div className="mb-8">
-            <div className="mb-4 flex items-center gap-2 text-muted-foreground">
-              <MapPin className="h-4 w-4" />
-              <span className="text-sm">{userCity}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <h1 className="text-4xl font-bold">Discover Events</h1>
-              <Button
-                onClick={async () => {
-                  setLoading(true);
-                  try {
-                    const { data, error } = await supabase.functions.invoke('discover-events', {
-                      body: { userId: currentUserId }
-                    });
-                    
-                    if (error) throw error;
-                    
-                    toast({
-                      title: "Events discovered!",
-                      description: data.message,
-                    });
-                    
-                    await loadData();
-                  } catch (error: any) {
-                    toast({
-                      variant: "destructive",
-                      title: "Error",
-                      description: error.message,
-                    });
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-                className="gap-2"
-              >
-                <Sparkles className="h-4 w-4" />
-                Discover New Events
-              </Button>
-            </div>
-            <div className="mt-6 flex gap-3">
-              <Button
-                variant={timeFilter === "today" ? "default" : "outline"}
-                onClick={() => setTimeFilter("today")}
-                className="gap-2"
-              >
-                <Calendar className="h-4 w-4" />
-                Today
-              </Button>
-              <Button
-                variant={timeFilter === "this_week" ? "default" : "outline"}
-                onClick={() => setTimeFilter("this_week")}
-                className="gap-2"
-              >
-                <Calendar className="h-4 w-4" />
-                This Week
-              </Button>
-            </div>
+            <h1 className="text-4xl font-bold">Saved Events</h1>
+            <p className="mt-2 text-muted-foreground">
+              Events you've saved to attend
+            </p>
           </div>
 
           {/* Events Grid */}
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {filteredEvents.map((event) => {
-              const status = attendanceMap[event.id];
+            {events.map((event) => {
+              const isPast = isEventPast(event.date);
               return (
                 <Card
                   key={event.id}
@@ -306,6 +219,11 @@ export default function Discover() {
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <Calendar className="h-4 w-4" />
                         <span>{new Date(event.date).toLocaleDateString()}</span>
+                        {isPast && (
+                          <Badge variant="secondary" className="ml-auto text-xs">
+                            Past
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-muted-foreground">
                         <MapPin className="h-4 w-4" />
@@ -330,17 +248,40 @@ export default function Discover() {
                       </div>
                     </div>
 
-                    {/* Save Button */}
-                    <div onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant={status === "saved" ? "default" : "outline"}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleSaveEvent(event.id)}
-                      >
-                        {status === "saved" && <Check className="mr-1 h-4 w-4" />}
-                        {status === "saved" ? "Saved" : "Save"}
-                      </Button>
+                    {/* Action Buttons */}
+                    <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                      {isPast ? (
+                        <>
+                          <Button
+                            variant="default"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleMarkAttended(event.id)}
+                          >
+                            <Check className="mr-1 h-4 w-4" />
+                            Attended
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleRemove(event.id)}
+                          >
+                            <X className="mr-1 h-4 w-4" />
+                            Remove
+                          </Button>
+                        </>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
+                          onClick={() => handleRemove(event.id)}
+                        >
+                          <X className="mr-1 h-4 w-4" />
+                          Remove
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </Card>
@@ -348,15 +289,18 @@ export default function Discover() {
             })}
           </div>
 
-          {filteredEvents.length === 0 && (
+          {events.length === 0 && (
             <div className="mt-12 text-center">
               <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-muted">
                 <Calendar className="h-10 w-10 text-muted-foreground" />
               </div>
-              <h2 className="mb-2 text-2xl font-semibold">No events found</h2>
-              <p className="text-muted-foreground">
-                Try adjusting your time filter or check back later
+              <h2 className="mb-2 text-2xl font-semibold">No saved events</h2>
+              <p className="mb-4 text-muted-foreground">
+                Events you save will appear here
               </p>
+              <Button onClick={() => navigate("/discover")}>
+                Discover Events
+              </Button>
             </div>
           )}
         </div>

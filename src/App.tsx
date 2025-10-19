@@ -7,6 +7,8 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Discover from "./pages/Discover";
+import Saved from "./pages/Saved";
+import Attended from "./pages/Attended";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import UserSearch from "./pages/UserSearch";
@@ -25,6 +27,8 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/onboarding" element={<Onboarding />} />
           <Route path="/discover" element={<Discover />} />
+          <Route path="/saved" element={<Saved />} />
+          <Route path="/attended" element={<Attended />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/profile/:userId" element={<Profile />} />
           <Route path="/search" element={<UserSearch />} />
