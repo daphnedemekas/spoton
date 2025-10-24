@@ -40,15 +40,25 @@ const Saved = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      const { data: attendanceData, error: attendanceError } = await supabase
+      // Get saved records
+      const { data: savedData, error: attendanceError } = await supabase
         .from('event_attendance')
         .select('event_id, id, status')
         .eq('user_id', user.id)
         .eq('status', 'saved');
 
       if (attendanceError) throw attendanceError;
+      // Get dismissed records and exclude them from saved
+      const { data: dismissedData } = await supabase
+        .from('event_attendance')
+        .select('event_id')
+        .eq('user_id', user.id)
+        .eq('status', 'dismissed');
 
-      const eventIds = attendanceData?.map(a => a.event_id) || [];
+      const dismissedIds = new Set((dismissedData || []).map(d => d.event_id));
+      const filteredSaved = (savedData || []).filter(a => !dismissedIds.has(a.event_id));
+
+      const eventIds = filteredSaved.map(a => a.event_id) || [];
       
       if (eventIds.length === 0) {
         setEvents([]);
@@ -65,8 +75,27 @@ const Saved = () => {
 
       const eventsWithAttendance = eventsData?.map(event => ({
         ...event,
-        attendance: attendanceData?.find(a => a.event_id === event.id)
+        attendance: filteredSaved.find(a => a.event_id === event.id)
       })) || [];
+
+      // Also exclude saved events whose canonical key matches a dismissed event's canonical key
+      if (dismissedIds.size > 0) {
+        const dismissedIdsArray = Array.from(dismissedIds);
+        const { data: dismissedEvents } = await supabase
+          .from('events')
+          .select('*')
+          .in('id', dismissedIdsArray);
+        const dismissedCanonical = new Set(
+          (dismissedEvents || []).map((e: any) => `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`)
+        );
+        const filteredByCanonical = eventsWithAttendance.filter((e: any) => {
+          const key = `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`;
+          return !dismissedCanonical.has(key);
+        });
+        // replace
+        eventsWithAttendance.length = 0;
+        eventsWithAttendance.push(...filteredByCanonical);
+      }
 
       // Sort by date - soonest first
       const sortedEvents = eventsWithAttendance.sort((a, b) => {
@@ -138,7 +167,7 @@ const Saved = () => {
     }
   };
 
-  const handleRemoveEvent = async (attendanceId: string) => {
+  const handleRemoveEvent = async (eventId: string, attendanceId: string) => {
     try {
       const { error } = await supabase
         .from('event_attendance')
@@ -146,6 +175,13 @@ const Saved = () => {
         .eq('id', attendanceId);
 
       if (error) throw error;
+
+      // Also mark as dismissed to prevent reappearing by canonical dedupe
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        await (supabase as any).from('event_attendance').delete().eq('user_id', user.id).eq('event_id', eventId);
+        await supabase.from('event_attendance').insert({ user_id: user.id, event_id: eventId, status: 'dismissed' });
+      }
 
       toast({
         title: "Success",
@@ -358,7 +394,7 @@ const Saved = () => {
                             <Button
                               size="sm"
                               variant="destructive"
-                              onClick={() => handleRemoveEvent(event.attendance!.id)}
+                              onClick={() => handleRemoveEvent(event.id, event.attendance!.id)}
                               className="w-full"
                             >
                               <Trash2 className="h-4 w-4 mr-1" />

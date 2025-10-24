@@ -41,6 +41,8 @@ export default function Discover() {
   const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
   const [scrapedSites, setScrapedSites] = useState<any[]>([]);
   const [showScrapingPanel, setShowScrapingPanel] = useState(false);
+  const [discoveryStep, setDiscoveryStep] = useState<'idle'|'start'|'search'|'listings'|'events'|'done'>('idle');
+  const [discoveryCounts, setDiscoveryCounts] = useState<{ braveSites: number; eventLinks: number; candidatePages: number; extractedEvents: number }>({ braveSites: 0, eventLinks: 0, candidatePages: 0, extractedEvents: 0 });
   const [pendingConnectionsCount, setPendingConnectionsCount] = useState(0);
   const [loadingMessages, setLoadingMessages] = useState<string[]>([
     "Finding your perfect events...",
@@ -49,6 +51,7 @@ export default function Discover() {
   ]);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
   const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
+  const [isBackgroundDiscovering, setIsBackgroundDiscovering] = useState(false);
   const lastAutoDiscoverAtRef = useRef<number>(0);
   const initialDiscoveryTriggeredRef = useRef<boolean>(false);
   
@@ -73,6 +76,32 @@ export default function Discover() {
       return () => clearInterval(interval);
     }
   }, [loading, loadingMessages]);
+
+  // Poll discovery progress while loading or background discovering
+  useEffect(() => {
+    if (!loading && !isBackgroundDiscovering) return;
+    let isActive = true;
+    setShowScrapingPanel(true);
+    const poll = async () => {
+      try {
+        const res = await fetch('/api/discovery-progress');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isActive) return;
+        if (Array.isArray(data?.sites)) setScrapedSites(data.sites);
+        if (data?.counts) setDiscoveryCounts({
+          braveSites: Number(data.counts.braveSites || 0),
+          eventLinks: Number(data.counts.eventLinks || 0),
+          candidatePages: Number(data.counts.candidatePages || 0),
+          extractedEvents: Number(data.counts.extractedEvents || 0),
+        });
+        if (data?.step) setDiscoveryStep(data.step);
+      } catch {}
+    };
+    const id = setInterval(poll, 1000);
+    poll();
+    return () => { isActive = false; clearInterval(id); };
+  }, [loading, isBackgroundDiscovering]);
 
   const loadPendingConnections = async () => {
     try {
@@ -136,8 +165,16 @@ export default function Discover() {
 
       console.log('DB events count:', eventsData?.length, eventsData?.slice(0,2));
       if (eventsData) {
+        // Strong client-side dedupe by normalized (title|date|location)
+        const seenKeys = new Set<string>();
+        const uniqueEvents = (eventsData || []).filter((e: any) => {
+          const key = `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`;
+          if (seenKeys.has(key)) return false;
+          seenKeys.add(key);
+          return true;
+        });
         // Filter out events the user has already interacted with
-        const uninteractedEvents = eventsData
+        const uninteractedEvents = uniqueEvents
           .filter(event => !interactedEventIds.has(event.id))
           .filter(event => !(event.event_link || '').includes('example.com'));
         console.log('Uninteracted events:', uninteractedEvents.length);
@@ -149,7 +186,61 @@ export default function Discover() {
         });
         console.log('Preferred (city/online) events:', preferred.length);
         const pool = preferred.length > 0 ? preferred : uninteractedEvents;
-        const shuffled = [...pool].sort(() => Math.random() - 0.5);
+        
+        // Rank by user preferences while preserving variety
+        const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+        const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+        const interests = (userInterests || []).map((i: any) => (i.interest || '').toLowerCase());
+        const vibes = (userVibes || []).map((v: any) => (v.vibe || '').toLowerCase());
+
+        const interestSet = new Set(interests);
+        const vibeSet = new Set(vibes);
+
+        function preferenceScore(ev: any): number {
+          const evInterests = (ev.interests || []).map((x: string) => (x || '').toLowerCase());
+          const evVibes = (ev.vibes || []).map((x: string) => (x || '').toLowerCase());
+          let score = 0;
+          for (const i of evInterests) if (interestSet.has(i)) score += 3;
+          for (const v of evVibes) if (vibeSet.has(v)) score += 1.5;
+          // Recency/date proximity bonus
+          const daysAway = Math.min(30, Math.max(0, (new Date(ev.date).getTime() - Date.now()) / (1000*60*60*24)));
+          score += (30 - daysAway) * 0.05;
+          return score;
+        }
+
+        // Sort by preference score, then date
+        const ranked = [...pool].sort((a, b) => {
+          const sa = preferenceScore(a);
+          const sb = preferenceScore(b);
+          if (sb !== sa) return sb - sa;
+          return new Date(a.date).getTime() - new Date(b.date).getTime();
+        });
+
+        // Better shuffling: group by interest, shuffle each group, then interleave
+        const byInterest = new Map<string, typeof ranked>();
+        ranked.forEach(event => {
+          const interest = event.interests?.[0] || 'General';
+          if (!byInterest.has(interest)) byInterest.set(interest, []);
+          byInterest.get(interest)!.push(event);
+        });
+        
+        // Shuffle within each interest group
+        byInterest.forEach((events, interest) => {
+          byInterest.set(interest, events.sort(() => Math.random() - 0.5));
+        });
+        
+        // Interleave events from different interests for variety
+        const shuffled: typeof ranked = [];
+        const interestArrays = Array.from(byInterest.values());
+        let maxLength = Math.max(...interestArrays.map(arr => arr.length));
+        
+        for (let i = 0; i < maxLength; i++) {
+          interestArrays.forEach(arr => {
+            if (i < arr.length) shuffled.push(arr[i]);
+          });
+        }
+        
+        console.log('Shuffled with diversity:', shuffled.length, 'interests:', byInterest.size);
         setAllEvents(shuffled);
 
         // If no events exist yet, trigger an optimized discovery
@@ -159,16 +250,20 @@ export default function Discover() {
           
           try {
             setLoading(true);
-            // Use optimized settings for maximum events
+            // Fetch user interests and vibes for personalized discovery
+            const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+            const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+            const interests = (userInterests || []).map((i: any) => i.interest);
+            const vibes = (userVibes || []).map((v: any) => v.vibe);
+            console.log('Using user interests:', interests, 'vibes:', vibes);
+            
+            // Use optimized settings with user preferences
             const { data } = await supabase.functions.invoke('discover-events', { 
-              body: { city: profile?.city || userCity, interests: [], vibes: [] } 
+              body: { city: profile?.city || userCity, interests, vibes } 
             });
             console.log('Initial discovery response:', data);
-            // Reload after discovery
-            const { data: after } = await supabase.from("events").select("*");
-            console.log('Events after discovery:', after?.length);
-            const updated = (after || []).filter(event => !interactedEventIds.has(event.id)).filter(event => !(event.event_link || '').includes('example.com'));
-            setAllEvents(updated.sort(() => Math.random() - 0.5));
+            // Reload data with proper shuffling
+            await loadData();
           } catch (e) {
             console.error('Initial discovery failed:', e);
           } finally {
@@ -191,6 +286,10 @@ export default function Discover() {
 
   const handleSaveEvent = async (event: Event) => {
     try {
+      // Remove from local decks immediately so it disappears even at stack end
+      setDisplayedEvents(prev => prev.filter(e => e.id !== event.id));
+      setAllEvents(prev => prev.filter(e => e.id !== event.id));
+
       // First delete any existing record to ensure clean state
       await (supabase as any).from("event_attendance").delete().eq("user_id", currentUserId).eq("event_id", event.id);
 
@@ -222,6 +321,10 @@ export default function Discover() {
 
   const handleRemoveEvent = async (event: Event) => {
     try {
+      // Remove from local decks immediately so it disappears even at stack end
+      setDisplayedEvents(prev => prev.filter(e => e.id !== event.id));
+      setAllEvents(prev => prev.filter(e => e.id !== event.id));
+
       // Delete any existing record first to ensure clean state
       await (supabase as any).from("event_attendance").delete().eq("user_id", currentUserId).eq("event_id", event.id);
 
@@ -252,9 +355,10 @@ export default function Discover() {
   };
 
   const handleSwipe = async (direction: string, event: Event) => {
-    // Immediately remove from local state
+    // Immediately remove from local state (both sources)
+    setDisplayedEvents(prev => prev.filter(e => e.id !== event.id));
     setAllEvents(prev => prev.filter(e => e.id !== event.id));
-    setCurrentIndex(prev => prev); // Keep same index to show next card
+    setCurrentIndex(prev => (prev > 0 ? prev - 1 : 0));
     
     if (direction === "right") {
       await handleSaveEvent(event);
@@ -262,6 +366,7 @@ export default function Discover() {
       await handleRemoveEvent(event);
     }
   };
+
 
   const handleUndo = () => {
     if (currentIndex > 0) {
@@ -303,6 +408,23 @@ export default function Discover() {
     }
   }, [filteredEvents]);
 
+  // If displayedEvents shrinks, keep currentIndex in range
+  useEffect(() => {
+    if (currentIndex >= displayedEvents.length) {
+      const nextIndex = Math.max(0, displayedEvents.length - 1);
+      if (nextIndex !== currentIndex) setCurrentIndex(nextIndex);
+    }
+  }, [displayedEvents.length, currentIndex]);
+
+  // Safety: if displayed list is empty but we still have filtered events, re-seed the batch
+  useEffect(() => {
+    if (displayedEvents.length === 0 && filteredEvents.length > 0) {
+      const initialBatch = filteredEvents.slice(0, BATCH_SIZE);
+      setDisplayedEvents(initialBatch);
+      setCurrentIndex(0);
+    }
+  }, [displayedEvents.length, filteredEvents]);
+
   // Auto-discover more events when running low (cooldown + single-flight)
   useEffect(() => {
     const autoDiscover = async () => {
@@ -311,20 +433,38 @@ export default function Discover() {
       const canRun = filteredEvents.length <= 5 && !isAutoDiscovering && (now - lastAutoDiscoverAtRef.current > cooldownMs);
       if (!canRun) return;
 
-      console.log('Running low on events, auto-discovering more...');
+      console.log('Running low on events, discovering more in background...');
       setIsAutoDiscovering(true);
+      setIsBackgroundDiscovering(true);
       try {
-        setLoading(true);
-        // Use optimized default settings
-        const { data } = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [] } });
-        console.log('Auto-discovery complete:', data);
+        // NO setLoading(true) - keep UI responsive!
+        
+        // Fetch user interests and vibes for personalized discovery
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        
+        const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+        const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+        const interests = (userInterests || []).map((i: any) => i.interest);
+        const vibes = (userVibes || []).map((v: any) => v.vibe);
+        
+        // Use optimized settings with user preferences
+        const { data } = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests, vibes } });
+        console.log('Background discovery complete:', data);
+        
+        // Silently reload data without blocking UI
         await loadData();
+        
+        toast({ 
+          title: "New events discovered!", 
+          description: `Found ${data?.events?.length || 0} more events` 
+        });
       } catch (error: any) {
-        console.error('Auto-discovery failed:', error);
+        console.error('Background discovery failed:', error);
       } finally {
         lastAutoDiscoverAtRef.current = Date.now();
         setIsAutoDiscovering(false);
-        setLoading(false);
+        setIsBackgroundDiscovering(false);
       }
     };
 
@@ -352,13 +492,69 @@ export default function Discover() {
     return cards;
   }, [displayedEvents, currentIndex]);
 
+  // If deck becomes empty, trigger immediate background discover (no cooldown)
+  useEffect(() => {
+    const run = async () => {
+      if (loading) return;
+      if (visibleCards.length > 0) return;
+      if (isAutoDiscovering) return;
+      try {
+        setIsAutoDiscovering(true);
+        setIsBackgroundDiscovering(true);
+        setShowScrapingPanel(true);
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+        const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+        const interests = (userInterests || []).map((i: any) => i.interest);
+        const vibes = (userVibes || []).map((v: any) => v.vibe);
+        await supabase.functions.invoke('discover-events', { body: { city: userCity, interests, vibes } });
+        await loadData();
+      } catch (e) {
+        console.error('Auto-discover on empty deck failed:', e);
+      } finally {
+        lastAutoDiscoverAtRef.current = Date.now();
+        setIsAutoDiscovering(false);
+        setIsBackgroundDiscovering(false);
+      }
+    };
+    run();
+  }, [visibleCards.length, loading, isAutoDiscovering, userCity]);
+
   if (loading) {
+    const stepLabel = discoveryStep === 'start' ? 'Starting discovery' :
+      discoveryStep === 'search' ? 'Finding event sites' :
+      discoveryStep === 'listings' ? 'Scanning listings' :
+      discoveryStep === 'events' ? 'Extracting events' : 'Preparing results';
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-subtle">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        <p className="text-center text-lg font-medium">
-          Discovering events for you. This may take a few minutes.
-        </p>
+      <div className="min-h-screen bg-gradient-subtle">
+        <div className="container mx-auto px-4 py-10">
+          <div className="mx-auto max-w-2xl text-center mb-6">
+            <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            <h2 className="text-2xl font-semibold">Discovering events for you</h2>
+            <p className="text-muted-foreground mt-1">{stepLabel}…</p>
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <div className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="text-xs text-muted-foreground">Sites found</div>
+                <div className="text-lg font-semibold">{discoveryCounts.braveSites}</div>
+              </div>
+              <div className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="text-xs text-muted-foreground">Event links</div>
+                <div className="text-lg font-semibold">{discoveryCounts.eventLinks}</div>
+              </div>
+              <div className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="text-xs text-muted-foreground">Candidates</div>
+                <div className="text-lg font-semibold">{discoveryCounts.candidatePages}</div>
+              </div>
+              <div className="rounded-md border bg-card p-3 shadow-sm">
+                <div className="text-xs text-muted-foreground">Events extracted</div>
+                <div className="text-lg font-semibold">{discoveryCounts.extractedEvents}</div>
+              </div>
+            </div>
+          </div>
+          {/* Live scraping panel */}
+          <ScrapingStatusPanel sites={scrapedSites} isVisible={true} />
+        </div>
       </div>
     );
   }
@@ -447,9 +643,19 @@ export default function Discover() {
                   setShowScrapingPanel(true);
                   setScrapedSites([]);
                   try {
-                    // Use optimized default settings for maximum events
+                    // Fetch user interests and vibes for personalized discovery
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) return;
+                    
+                    const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+                    const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+                    const interests = (userInterests || []).map((i: any) => i.interest);
+                    const vibes = (userVibes || []).map((v: any) => v.vibe);
+                    console.log('Discovering with interests:', interests, 'vibes:', vibes);
+                    
+                    // Use optimized settings with user preferences
                     const { data, error } = await supabase.functions.invoke('discover-events', {
-                      body: { city: userCity, interests: [], vibes: [] }
+                      body: { city: userCity, interests, vibes }
                     });
                     
                     if (error) throw error;

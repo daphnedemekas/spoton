@@ -9,7 +9,10 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "discover": "tsx scripts/test-discovery.ts"
+    "discover": "tsx scripts/test-discovery.ts",
+    "test:feed": "tsx scripts/test-feed-readiness.ts",
+    "test:buffer": "tsx scripts/test-buffer-simulation.ts",
+    "test": "vitest --run"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -67,6 +70,10 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "jsdom": "^25.0.1",
+    "vitest": "^2.1.5",
     "@eslint/js": "^9.32.0",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",

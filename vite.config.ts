@@ -17,6 +17,45 @@ const logToFile = (message: string, data?: any) => {
   console.log(message, data);
 };
 
+// HTML entity decoding and normalization helpers
+const htmlEntityMap: Record<string, string> = {
+  '&amp;': '&',
+  '&quot;': '"',
+  '&apos;': "'",
+  '&lt;': '<',
+  '&gt;': '>',
+  '&nbsp;': ' ',
+};
+function decodeHtmlEntities(input?: string): string {
+  if (!input) return '';
+  let s = input.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (m, p1) => {
+    if (p1[0] === '#') {
+      // numeric entity
+      const hex = p1[1] === 'x' || p1[1] === 'X';
+      const code = parseInt(hex ? p1.slice(2) : p1.slice(1), hex ? 16 : 10);
+      if (!isNaN(code)) {
+        try { return String.fromCharCode(code); } catch { return m; }
+      }
+      return m;
+    }
+    return htmlEntityMap[`&${p1};`] ?? m;
+  });
+  // Collapse whitespace
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+function normalizeLocation(loc: string, city: string): string {
+  const l = (loc || '').trim();
+  if (!l) return city;
+  const dl = l.toLowerCase();
+  const hasCity = dl.includes('san francisco') || dl.includes('oakland') || dl.includes('online');
+  if (!hasCity) {
+    // Prepend/replace with city if missing clear city marker
+    return city;
+  }
+  return l;
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   // Load env so server middleware can access OPENAI_API_KEY, etc.
@@ -37,10 +76,10 @@ export default defineConfig(({ mode }) => {
       {
         name: "local-api",
         configureServer(server) {
-          // SQLite init
+          // SQLite init - persistent shared database for events
           const dataDir = path.resolve(process.cwd(), ".data");
           if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-          const db = new Database(path.join(dataDir, "app.db"));
+          const db = new Database(path.join(dataDir, "spoton-events.db"));
           db.exec(`
             CREATE TABLE IF NOT EXISTS profiles (
               id TEXT PRIMARY KEY,
@@ -64,7 +103,45 @@ export default defineConfig(({ mode }) => {
               user_id TEXT PRIMARY KEY,
               frequency TEXT
             );
+            CREATE TABLE IF NOT EXISTS events (
+              id TEXT PRIMARY KEY,
+              title TEXT NOT NULL,
+              description TEXT,
+              date TEXT NOT NULL,
+              time TEXT,
+              location TEXT,
+              event_link TEXT NOT NULL,
+              image_url TEXT,
+              interests TEXT,
+              vibes TEXT,
+              created_at INTEGER DEFAULT (strftime('%s', 'now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_events_date ON events(date);
+            CREATE INDEX IF NOT EXISTS idx_events_location ON events(location);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_events_unique ON events(title, date, location);
           `);
+          // Round-robin discovery state per city+interests signature
+          db.exec(`
+            CREATE TABLE IF NOT EXISTS discovery_state (
+              key TEXT PRIMARY KEY,
+              offset INTEGER DEFAULT 0
+            );
+          `);
+
+          // Best-effort migration: add canonical_key and unique index for case-insensitive dedupe
+          try { db.exec(`ALTER TABLE events ADD COLUMN canonical_key TEXT`); } catch {}
+          try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_events_canonical ON events(canonical_key)`); } catch {}
+
+          // Discovery progress (in-memory, reset per server run)
+          let lastDiscoveryProgress: any = {
+            step: 'idle',
+            startedAt: 0,
+            city: '',
+            interests: [],
+            vibes: [],
+            sites: [],
+            counts: { braveSites: 0, eventLinks: 0, candidatePages: 0, extractedEvents: 0 },
+          };
 
           // --- OpenAI call utilities: global pacing, retries, caching, single-flight, and logging ---
             const openAIState = {
@@ -185,6 +262,13 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
+            // Discovery progress endpoint
+            if (req.url === "/api/discovery-progress" && req.method === "GET") {
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify(lastDiscoveryProgress));
+              return;
+            }
+
             // Profile APIs (SQLite-backed)
             if (req.url.startsWith("/api/profile") && req.method === "GET") {
               const url = new URL(req.url, "http://localhost");
@@ -279,6 +363,84 @@ export default defineConfig(({ mode }) => {
               return;
             }
 
+            // Events API - shared persistent storage
+            if (req.url.startsWith("/api/events") && req.method === "GET") {
+              const url = new URL(req.url, "http://localhost");
+              const city = url.searchParams.get("city") || "";
+              const limit = parseInt(url.searchParams.get("limit") || "100");
+              
+              let query = "SELECT * FROM events WHERE date >= date('now')";
+              const params: any = {};
+              
+              if (city) {
+                query += " AND (location LIKE @city OR location = 'Online')";
+                params.city = `%${city}%`;
+              }
+              
+              query += " ORDER BY date ASC LIMIT @limit";
+              params.limit = limit;
+              
+              const rows = db.prepare(query).all(params);
+              const events = rows.map((row: any) => ({
+                ...row,
+                interests: row.interests ? JSON.parse(row.interests) : [],
+                vibes: row.vibes ? JSON.parse(row.vibes) : []
+              }));
+              
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify(events));
+              return;
+            }
+            
+            if (req.url === "/api/events" && req.method === "POST") {
+              const chunks: Buffer[] = [];
+              await new Promise<void>((resolve) => {
+                req.on("data", (c) => chunks.push(c));
+                req.on("end", () => resolve());
+              });
+              const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}");
+              const events = Array.isArray(body) ? body : [body];
+              
+              let inserted = 0;
+              let skipped = 0;
+              
+              for (const event of events) {
+                try {
+                  const canonical_key = `${(event.title||'').toLowerCase()}|${(event.date||'').slice(0,10)}|${(event.location||'').toLowerCase()}`;
+                  db.prepare(`INSERT OR IGNORE INTO events 
+                    (id, title, description, date, time, location, event_link, image_url, interests, vibes, canonical_key)
+                    VALUES (@id, @title, @description, @date, @time, @location, @event_link, @image_url, @interests, @vibes, @canonical_key)
+                  `).run({
+                    id: event.id || crypto.randomUUID(),
+                    title: event.title,
+                    description: event.description || '',
+                    date: event.date,
+                    time: event.time || 'See website',
+                    location: event.location,
+                    event_link: event.event_link,
+                    image_url: event.image_url || null,
+                    interests: JSON.stringify(event.interests || []),
+                    vibes: JSON.stringify(event.vibes || []),
+                    canonical_key
+                  });
+                  inserted++;
+                } catch (e) {
+                  skipped++;
+                }
+              }
+              
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ inserted, skipped, total: events.length }));
+              return;
+            }
+
+            if (req.url === "/api/events/clear" && req.method === "POST") {
+              db.exec("DELETE FROM events;");
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ ok: true }));
+              return;
+            }
+
             if (req.url === "/api/discover-events" && req.method === "POST") {
               try {
                 const startTime = Date.now();
@@ -296,6 +458,16 @@ export default defineConfig(({ mode }) => {
                 const interests: string[] = Array.isArray(body.interests) ? body.interests : [];
                 const vibes: string[] = Array.isArray(body.vibes) ? body.vibes : [];
                 logToFile('[DISCOVERY] Request params', { city, interests, vibes, body });
+                // init progress
+                lastDiscoveryProgress = {
+                  step: 'start',
+                  startedAt: Date.now(),
+                  city,
+                  interests,
+                  vibes,
+                  sites: [],
+                  counts: { braveSites: 0, eventLinks: 0, candidatePages: 0, extractedEvents: 0 },
+                };
                 
                 // Check cache first (cache for 10 minutes)
                 const cacheKey = `${city}-${interests.join(',')}-${vibes.join(',')}`;
@@ -315,6 +487,29 @@ export default defineConfig(({ mode }) => {
                 const skipRanking: boolean = !!body.skipRanking;
                 const timeoutMs: number = Math.min(Math.max(Number(body.timeoutMs) || 120000, 15000), 180000);
                 const startTs = Date.now();
+                let responded = false;
+                const EARLY_MIN_EVENTS = 10;
+                function saveEventsToDb(eventsArr: any[]) {
+                  try {
+                    for (const event of eventsArr) {
+                      db.prepare(`INSERT OR IGNORE INTO events 
+                        (id, title, description, date, time, location, event_link, image_url, interests, vibes)
+                        VALUES (@id, @title, @description, @date, @time, @location, @event_link, @image_url, @interests, @vibes)
+                      `).run({
+                        id: crypto.randomUUID(),
+                        title: event.title,
+                        description: event.description || '',
+                        date: event.date,
+                        time: event.time || 'See website',
+                        location: event.location,
+                        event_link: event.event_link,
+                        image_url: event.image_url || null,
+                        interests: JSON.stringify(event.interests || []),
+                        vibes: JSON.stringify(event.vibes || [])
+                      });
+                    }
+                  } catch {}
+                }
                 console.log('[discover-events] Batch limit:', batchLimit, 'sitesLimit:', sitesLimit, 'resultsPerQuery:', resultsPerQuery, 'skipRanking:', skipRanking, 'timeoutMs:', timeoutMs);
 
                 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY;
@@ -331,6 +526,29 @@ export default defineConfig(({ mode }) => {
                 const now = new Date();
                 const today = now.toISOString().split('T')[0];
                 const searchInterests = interests.length > 0 ? interests : ['music', 'food', 'tech'];
+
+                // Helper: rotate array by offset
+                const rotateArray = (arr: string[], offset: number) => {
+                  if (arr.length === 0) return arr;
+                  const k = ((offset % arr.length) + arr.length) % arr.length;
+                  return arr.slice(k).concat(arr.slice(0, k));
+                };
+
+                // Round-robin selection of interests across runs
+                let selectedInterests = searchInterests;
+                let rotationKey = '';
+                try {
+                  if (searchInterests.length > 0) {
+                    const canonical = Array.from(new Set(searchInterests.map((s: string) => (s||'').toLowerCase()))).sort().join(',');
+                    rotationKey = `${city}|${canonical}`;
+                    const row = db.prepare("SELECT offset FROM discovery_state WHERE key = ?").get(rotationKey) as any;
+                    const currentOffset = Number(row?.offset || 0);
+                    const rotated = rotateArray(searchInterests, currentOffset);
+                    selectedInterests = rotated;
+                    // Store next offset (increment by interestsLimit, will be saved later after queries)
+                    (lastDiscoveryProgress as any).nextOffset = (currentOffset + interestsLimit) % searchInterests.length;
+                  }
+                } catch {}
                 
                 // Generate next 7 days
                 const searchDays = Array.from({ length: 7 }, (_, i) => {
@@ -349,7 +567,7 @@ export default defineConfig(({ mode }) => {
                 const seenUrls = new Set<string>();
                 let queryCount = 0;
                 
-                for (const interest of searchInterests.slice(0, interestsLimit)) {
+                for (const interest of selectedInterests.slice(0, interestsLimit)) {
                   // Multiple query styles for each interest
                   const queryStyles = [
                     `${interest} events ${city} ${searchDays[0].monthDay}`,
@@ -404,7 +622,11 @@ export default defineConfig(({ mode }) => {
                   }
                 }
                 
-                  logToFile('[DISCOVERY] Brave websites collected', { count: braveWebsites.length, websites: braveWebsites, time: Date.now() - braveStart });
+                logToFile('[DISCOVERY] Brave websites collected', { count: braveWebsites.length, websites: braveWebsites, time: Date.now() - braveStart });
+                lastDiscoveryProgress.step = 'search';
+                lastDiscoveryProgress.sites = braveWebsites.slice(0, sitesLimit).map(w => ({ url: w.url, source: w.source, interest: w.interest, status: 'pending' }));
+                lastDiscoveryProgress.counts.braveSites = braveWebsites.length;
+                (lastDiscoveryProgress as any).selectedInterests = selectedInterests.slice(0, interestsLimit);
 
                 // Step 2: Find event links from listing pages
                 const eventLinks: Set<string> = new Set();
@@ -418,7 +640,7 @@ export default defineConfig(({ mode }) => {
                     logToFile('[DISCOVERY] Scraping listing page', { url: website.url, source: website.source });
                     const response = await fetch(website.url, {
                       headers: { 'User-Agent': 'Mozilla/5.0' },
-                      signal: AbortSignal.timeout(10000)
+                      signal: AbortSignal.timeout(12000)
                     });
                     
                     if (response.ok) {
@@ -483,20 +705,28 @@ export default defineConfig(({ mode }) => {
                         }
                       });
                       
-                      scrapingStatus.push({ url: website.url, status: 'success' });
+                      scrapingStatus.push({ url: website.url, source: website.source, interest: website.interest, status: 'success' });
+                      // progress update
+                      const entry = lastDiscoveryProgress.sites.find((s: any) => s.url === website.url);
+                      if (entry) entry.status = 'success';
+                      lastDiscoveryProgress.counts.eventLinks = eventLinks.size;
                     }
                   } catch (error) {
                     console.log('[discover-events] Failed to scrape', website.url);
-                    scrapingStatus.push({ url: website.url, status: 'failed' });
+                    scrapingStatus.push({ url: website.url, source: website.source, interest: website.interest, status: 'failed' });
+                    const entry = lastDiscoveryProgress.sites.find((s: any) => s.url === website.url);
+                    if (entry) entry.status = 'failed';
                   }
                 }
                 
-                  logToFile('[DISCOVERY] Event links found', { count: eventLinks.size, links: Array.from(eventLinks), time: Date.now() - scrapingStart });
+                logToFile('[DISCOVERY] Event links found', { count: eventLinks.size, links: Array.from(eventLinks), time: Date.now() - scrapingStart });
+                lastDiscoveryProgress.step = 'listings';
+                lastDiscoveryProgress.counts.eventLinks = eventLinks.size;
                   if (eventLinks.size === 0) {
                     console.log('[discover-events] No event links found; loosening filters slightly');
                     for (const website of braveWebsites.slice(0, sitesLimit)) {
                       try {
-                        const response = await fetch(website.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) });
+                        const response = await fetch(website.url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(12000) });
                         if (!response.ok) continue;
                         const html = await response.text();
                         const $ = cheerio.load(html);
@@ -556,11 +786,11 @@ export default defineConfig(({ mode }) => {
                                 const ampm = startDate.getHours() >= 12 ? 'PM' : 'AM';
                                 const timeStr = `${hours}:${minutes} ${ampm}`;
                                 extractedEvents.push({
-                                  title: item.name || '',
-                                  description: item.description || '',
+                                  title: decodeHtmlEntities(item.name || ''),
+                                  description: decodeHtmlEntities(item.description || ''),
                                   date: dateStr,
                                   time: timeStr,
-                                  location: item.location?.name || item.location?.address?.addressLocality || city,
+                                  location: normalizeLocation(decodeHtmlEntities(item.location?.name || item.location?.address?.addressLocality || city), city),
                                   event_link: item.url || link,
                                   image_url: Array.isArray(item.image) ? item.image[0] : item.image,
                                   interests: interests.length > 0 ? [interests[0]] : ['General'],
@@ -572,8 +802,8 @@ export default defineConfig(({ mode }) => {
                           } catch {}
                         });
                         if (!found) {
-                          const title = $('h1').first().text().trim() || $('[class*="title"]').first().text().trim();
-                          const description = $('meta[name="description"]').attr('content') || $('[class*="description"]').first().text().trim().substring(0, 300);
+                          const title = decodeHtmlEntities($('h1').first().text().trim() || $('[class*="title"]').first().text().trim());
+                          const description = decodeHtmlEntities($('meta[name="description"]').attr('content') || $('[class*="description"]').first().text().trim().substring(0, 300));
                           if (title && title.length > 3) {
                             candidatePages.push({ url: link, title, description: description || '' });
                           }
@@ -656,12 +886,13 @@ Return JSON: {"validations": [{"url": "...", "isEvent": true/false, "events": [{
                             skipped++;
                             continue;
                           }
+                          // Normalize & decode
                           extractedEvents.push({
-                            title: ev.title,
-                            description: ev.description || `Event in ${city}`,
+                            title: decodeHtmlEntities(ev.title),
+                            description: decodeHtmlEntities(ev.description || `Event in ${city}`),
                             date: ev.date,
                             time: ev.time || 'See website',
-                            location: ev.location || city,
+                            location: normalizeLocation(decodeHtmlEntities(ev.location || city), city),
                             event_link: ev.event_link,
                             interests: interests.length > 0 ? [interests[0]] : ['General'],
                             vibes: vibes.length > 0 ? [vibes[0]] : ['Fun']
@@ -704,6 +935,9 @@ Return JSON: {"validations": [{"url": "...", "isEvent": true/false, "events": [{
                 }
                 
                 logToFile('[DISCOVERY] Events extracted from pages', { count: extractedEvents.length, events: extractedEvents, time: Date.now() - eventScrapingStart });
+                lastDiscoveryProgress.step = 'events';
+                lastDiscoveryProgress.counts.candidatePages = candidatePages.length;
+                lastDiscoveryProgress.counts.extractedEvents = extractedEvents.length;
                 
                 // Always use LLM for quality - no fast-path
                 
@@ -842,6 +1076,30 @@ Extract 15-20 events. Return JSON with "events" array. Each event: title, descri
                   const finalEvents = dedupedEvents.slice(0, 50);
                   logToFile('[DISCOVERY] Final events (no LLM ranking needed)', { count: finalEvents.length, events: finalEvents.slice(0, 10), totalTime: Date.now() - startTime });
                   
+                  // Save events to persistent database
+                  try {
+                    for (const event of finalEvents) {
+                      db.prepare(`INSERT OR IGNORE INTO events 
+                        (id, title, description, date, time, location, event_link, image_url, interests, vibes)
+                        VALUES (@id, @title, @description, @date, @time, @location, @event_link, @image_url, @interests, @vibes)
+                      `).run({
+                        id: crypto.randomUUID(),
+                        title: event.title,
+                        description: event.description || '',
+                        date: event.date,
+                        time: event.time || 'See website',
+                        location: event.location,
+                        event_link: event.event_link,
+                        image_url: event.image_url || null,
+                        interests: JSON.stringify(event.interests || []),
+                        vibes: JSON.stringify(event.vibes || [])
+                      });
+                    }
+                    console.log('[discover-events] Saved', finalEvents.length, 'events to persistent database');
+                  } catch (e) {
+                    console.error('[discover-events] Failed to save to database:', e);
+                  }
+                  
                   // Cache results
                   discoveryCache.set(cacheKey, {
                     expiresAt: Date.now() + 10 * 60 * 1000,
@@ -966,6 +1224,40 @@ Quality requirements:
                 });
 
                 logToFile('[DISCOVERY] Final events to return', { count: events.length, events, llmTime: Date.now() - llmStart, totalTime: Date.now() - startTime });
+                lastDiscoveryProgress.step = 'done';
+
+                // Persist new rotation offset
+                try {
+                  if (rotationKey && searchInterests.length > 0) {
+                    const nextOffset = Number((lastDiscoveryProgress as any).nextOffset || interestsLimit) % searchInterests.length;
+                    db.prepare(`INSERT INTO discovery_state (key, offset) VALUES (@key, @offset)
+                                ON CONFLICT(key) DO UPDATE SET offset = excluded.offset`).run({ key: rotationKey, offset: nextOffset });
+                  }
+                } catch {}
+                
+                // Save events to persistent database
+                try {
+                  for (const event of events) {
+                    db.prepare(`INSERT OR IGNORE INTO events 
+                      (id, title, description, date, time, location, event_link, image_url, interests, vibes)
+                      VALUES (@id, @title, @description, @date, @time, @location, @event_link, @image_url, @interests, @vibes)
+                    `).run({
+                      id: crypto.randomUUID(),
+                      title: event.title,
+                      description: event.description || '',
+                      date: event.date,
+                      time: event.time || 'See website',
+                      location: event.location,
+                      event_link: event.event_link,
+                      image_url: event.image_url || null,
+                      interests: JSON.stringify(event.interests || []),
+                      vibes: JSON.stringify(event.vibes || [])
+                    });
+                  }
+                  console.log('[discover-events] Saved', events.length, 'events to persistent database');
+                } catch (e) {
+                  console.error('[discover-events] Failed to save to database:', e);
+                }
                 
                 // Cache the results for 10 minutes
                 discoveryCache.set(cacheKey, {

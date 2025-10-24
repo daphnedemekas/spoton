@@ -92,6 +92,55 @@
   };
 
   const tableApi = (table: keyof DemoDB) => {
+    // Special handling for events table - use backend API
+    if (table === 'events') {
+      const selectBuilder = (_columns?: string) => {
+        const thenable: any = {
+          eq: (key: string, value: any) => thenable,
+          in: (key: string, values: any[]) => thenable,
+          or: (expr: string) => thenable,
+          order: (key: string, options?: { ascending?: boolean }) => thenable,
+          async single() {
+            try {
+              const res = await fetch('/api/events?limit=1');
+              const events = await res.json();
+              return { data: events[0] ?? null, error: null };
+            } catch (e) {
+              return { data: null, error: e };
+            }
+          },
+          async maybeSingle() {
+            return this.single();
+          },
+          async execute() {
+            try {
+              const res = await fetch('/api/events?limit=100');
+              const events = await res.json();
+              return { data: events, error: null };
+            } catch (e) {
+              return { data: [], error: e };
+            }
+          },
+          async then(resolve: any) {
+            try {
+              const res = await fetch('/api/events?limit=100');
+              const events = await res.json();
+              resolve({ data: events, error: null });
+            } catch (e) {
+              resolve({ data: [], error: e });
+            }
+          }
+        };
+        return thenable;
+      };
+      return {
+        select: (_columns?: string) => selectBuilder(_columns),
+        insert: async () => ({ data: null, error: null }),
+        update: () => ({ eq: async () => ({ data: null, error: null }) }),
+        delete: () => ({ eq: () => ({ then: (resolve: any) => resolve({ data: null, error: null }) }) })
+      };
+    }
+    
     const db = loadDB();
     const f = filterHelpers();
     const build = (rows: any[]) => ({ data: rows, error: null });
