@@ -307,12 +307,13 @@ export default defineConfig(({ mode }) => {
                   res.end(JSON.stringify({ events: cached.events.slice(0, body.limit || 20), scrapingStatus: [{ meta: 'cached', count: cached.events.length }] }));
                   return;
                 }
-                const batchLimit: number = Math.min(Math.max(Number(body.limit) || 30, 6), 60);
-                const sitesLimit: number = Math.min(Math.max(Number(body.sitesLimit) || 12, 3), 30);
-                const resultsPerQuery: number = Math.min(Math.max(Number(body.resultsPerQuery) || 8, 1), 10);
-                const interestsLimit: number = Math.min(Math.max(Number(body.interestsLimit) || 3, 1), 6);
+                // Optimized configuration for maximum events with good quality
+                const batchLimit: number = Math.min(Math.max(Number(body.limit) || 50, 6), 60);
+                const sitesLimit: number = Math.min(Math.max(Number(body.sitesLimit) || 15, 3), 30);
+                const resultsPerQuery: number = Math.min(Math.max(Number(body.resultsPerQuery) || 7, 1), 10);
+                const interestsLimit: number = Math.min(Math.max(Number(body.interestsLimit) || 4, 1), 6);
                 const skipRanking: boolean = !!body.skipRanking;
-                const timeoutMs: number = Math.min(Math.max(Number(body.timeoutMs) || 120000, 15000), 120000);
+                const timeoutMs: number = Math.min(Math.max(Number(body.timeoutMs) || 120000, 15000), 180000);
                 const startTs = Date.now();
                 console.log('[discover-events] Batch limit:', batchLimit, 'sitesLimit:', sitesLimit, 'resultsPerQuery:', resultsPerQuery, 'skipRanking:', skipRanking, 'timeoutMs:', timeoutMs);
 
@@ -820,6 +821,38 @@ Extract 15-20 events. Return JSON with "events" array. Each event: title, descri
                 // Step 3: Smart LLM processing - single comprehensive call
                 const llmStart = Date.now();
                 logToFile('[DISCOVERY] Step 3: Smart LLM processing', { eventCount: extractedEvents.length });
+                
+                // If we have 100+ structured events, skip LLM ranking for efficiency
+                if (extractedEvents.length >= 100) {
+                  console.log('[discover-events] Found', extractedEvents.length, 'structured events - skipping LLM ranking');
+                  const seen = new Set();
+                  const dedupedEvents = extractedEvents.filter((event: any) => {
+                    const key = `${(event.title || '').toLowerCase()}-${event.date}-${(event.location || '').toLowerCase()}`;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return event.title && event.date && event.event_link;
+                  });
+                  
+                  dedupedEvents.sort((a: any, b: any) => {
+                    const dateA = new Date(a.date);
+                    const dateB = new Date(b.date);
+                    return dateA.getTime() - dateB.getTime();
+                  });
+                  
+                  const finalEvents = dedupedEvents.slice(0, 50);
+                  logToFile('[DISCOVERY] Final events (no LLM ranking needed)', { count: finalEvents.length, events: finalEvents.slice(0, 10), totalTime: Date.now() - startTime });
+                  
+                  // Cache results
+                  discoveryCache.set(cacheKey, {
+                    expiresAt: Date.now() + 10 * 60 * 1000,
+                    events: finalEvents
+                  });
+                  
+                  res.setHeader("Content-Type", "application/json");
+                  res.end(JSON.stringify({ events: finalEvents, scrapingStatus }));
+                  return;
+                }
+                
                 // If we're close to our time budget, skip LLM and return best available events
                 if (Date.now() - startTs > timeoutMs - 8000) {
                   const fallbackEvents = extractedEvents.slice(0, 20).map(e => ({

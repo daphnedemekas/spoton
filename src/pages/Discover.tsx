@@ -152,21 +152,17 @@ export default function Discover() {
         const shuffled = [...pool].sort(() => Math.random() - 0.5);
         setAllEvents(shuffled);
 
-        // If no events exist yet, trigger a fast discovery once and reload
+        // If no events exist yet, trigger an optimized discovery
         if (uninteractedEvents.length === 0 && !initialDiscoveryTriggeredRef.current) {
           initialDiscoveryTriggeredRef.current = true;
-          console.log('No uninteracted events; triggering initial fast discovery...');
-          
-          // Fetch user interests and vibes
-          const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
-          const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
-          const interests = (userInterests || []).map((i: any) => i.interest);
-          const vibes = (userVibes || []).map((v: any) => v.vibe);
-          console.log('User interests:', interests, 'vibes:', vibes);
+          console.log('No events available; triggering initial discovery...');
           
           try {
             setLoading(true);
-            const { data } = await supabase.functions.invoke('discover-events', { body: { city: profile?.city || userCity, interests, vibes, limit: 15, sitesLimit: 6, resultsPerQuery: 4, interestsLimit: 2, skipRanking: false, timeoutMs: 30000 } });
+            // Use optimized settings for maximum events
+            const { data } = await supabase.functions.invoke('discover-events', { 
+              body: { city: profile?.city || userCity, interests: [], vibes: [] } 
+            });
             console.log('Initial discovery response:', data);
             // Reload after discovery
             const { data: after } = await supabase.from("events").select("*");
@@ -319,17 +315,10 @@ export default function Discover() {
       setIsAutoDiscovering(true);
       try {
         setLoading(true);
-        const { data } = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [], limit: 15, sitesLimit: 5, resultsPerQuery: 3, interestsLimit: 2, timeoutMs: 15000 } });
+        // Use optimized default settings
+        const { data } = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [] } });
         console.log('Auto-discovery complete:', data);
         await loadData();
-        // Immediate follow-up batch for more depth (ranked, larger search)
-        try {
-          const followUp = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [], limit: 25, sitesLimit: 8, resultsPerQuery: 4, interestsLimit: 3, timeoutMs: 25000 } });
-          console.log('Follow-up discovery complete:', followUp.data);
-          await loadData();
-        } catch (e) {
-          console.warn('Follow-up discovery failed:', e);
-        }
       } catch (error: any) {
         console.error('Auto-discovery failed:', error);
       } finally {
@@ -458,8 +447,9 @@ export default function Discover() {
                   setShowScrapingPanel(true);
                   setScrapedSites([]);
                   try {
+                    // Use optimized default settings for maximum events
                     const { data, error } = await supabase.functions.invoke('discover-events', {
-                      body: { city: userCity, interests: [], vibes: [], limit: 8, sitesLimit: 4, resultsPerQuery: 3, interestsLimit: 1, timeoutMs: 15000 }
+                      body: { city: userCity, interests: [], vibes: [] }
                     });
                     
                     if (error) throw error;
@@ -480,16 +470,6 @@ export default function Discover() {
                     });
                     
                     await loadData();
-                    // Immediate follow-up batch (ranked, broader)
-                    try {
-                      const followUp = await supabase.functions.invoke('discover-events', {
-                        body: { city: userCity, interests: [], vibes: [], limit: 40, sitesLimit: 20, resultsPerQuery: 8, interestsLimit: 3, skipRanking: false, timeoutMs: 20000 }
-                      });
-                      console.log('Follow-up discovery complete:', followUp.data);
-                      await loadData();
-                    } catch (e) {
-                      console.warn('Follow-up discovery failed:', e);
-                    }
                   } catch (error: any) {
                     toast({
                       variant: "destructive",
