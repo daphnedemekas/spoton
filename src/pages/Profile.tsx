@@ -102,50 +102,60 @@ export default function Profile() {
         setVibes(vibesData.map((v) => v.vibe));
       }
 
-      // Load attendance with events
-      const { data: attendanceData } = await supabase
+      // Load attendance and fetch events separately (no joins)
+      const { data: attendanceRows } = await supabase
         .from("event_attendance")
-        .select(`
-          status,
-          events (
-            id,
-            title,
-            description,
-            date,
-            location,
-            vibes,
-            interests
-          )
-        `)
+        .select("status, event_id")
         .eq("user_id", userId)
         .in("status", ["saved", "attended"]);
 
-      if (attendanceData) {
-        const willAttend: Event[] = [];
-        const attended: Event[] = [];
+      if (attendanceRows && attendanceRows.length > 0) {
+        const savedIds = attendanceRows.filter((r: any) => r.status === "saved").map((r: any) => r.event_id);
+        const attendedIds = attendanceRows.filter((r: any) => r.status === "attended").map((r: any) => r.event_id);
 
-        attendanceData.forEach((item: any) => {
-          if (item.events) {
-            if (item.status === "saved") {
-              willAttend.push(item.events);
-            } else if (item.status === "attended") {
-              attended.push(item.events);
-            }
-          }
-        });
+        let savedEvents: Event[] = [];
+        let attendedEventsList: Event[] = [];
 
-        setWillAttendEvents(willAttend);
-        setAttendedEvents(attended);
+        if (savedIds.length > 0) {
+          const { data: evSaved } = await supabase
+            .from("events")
+            .select("*")
+            .in("id", savedIds);
+          savedEvents = (evSaved as any) || [];
+        }
+
+        if (attendedIds.length > 0) {
+          const { data: evAttended } = await supabase
+            .from("events")
+            .select("*")
+            .in("id", attendedIds);
+          attendedEventsList = (evAttended as any) || [];
+        }
+
+        setWillAttendEvents(savedEvents);
+        setAttendedEvents(attendedEventsList);
+      } else {
+        setWillAttendEvents([]);
+        setAttendedEvents([]);
       }
 
       // Load connection status if viewing someone else's profile
       if (userId !== user.id) {
-        const { data: connectionData } = await supabase
+        const { data: conn1 } = await supabase
           .from('user_connections')
           .select('*')
-          .or(`and(user_id.eq.${user.id},connected_user_id.eq.${userId}),and(user_id.eq.${userId},connected_user_id.eq.${user.id})`)
+          .eq('user_id', user.id)
+          .eq('connected_user_id', userId)
           .maybeSingle();
 
+        const { data: conn2 } = await supabase
+          .from('user_connections')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('connected_user_id', user.id)
+          .maybeSingle();
+
+        const connectionData = conn1 || conn2;
         if (connectionData) {
           if (connectionData.user_id === user.id) {
             setConnectionStatus(connectionData.status === 'accepted' ? 'accepted' : 'pending_sent');
@@ -153,27 +163,35 @@ export default function Profile() {
             setConnectionStatus(connectionData.status === 'accepted' ? 'accepted' : 'pending_received');
           }
           setConnectionId(connectionData.id);
+        } else {
+          setConnectionStatus('none');
+          setConnectionId(undefined);
         }
       }
 
-      // Load connections list
-      const { data: connectionsData } = await supabase
+      // Load connections list (no joins): fetch accepted connections and then fetch profiles for other user ids
+      const { data: consA } = await supabase
         .from('user_connections')
-        .select('user_id, connected_user_id, profiles!user_connections_user_id_fkey(id, first_name, last_name, email, city), profiles!user_connections_connected_user_id_fkey(id, first_name, last_name, email, city)')
+        .select('id, user_id, connected_user_id, status')
         .eq('status', 'accepted')
-        .or(`user_id.eq.${userId},connected_user_id.eq.${userId}`);
+        .eq('user_id', userId);
+      const { data: consB } = await supabase
+        .from('user_connections')
+        .select('id, user_id, connected_user_id, status')
+        .eq('status', 'accepted')
+        .eq('connected_user_id', userId);
 
-      if (connectionsData) {
-        const connectedProfiles = connectionsData.map(conn => {
-          const isUserInitiator = conn.user_id === userId;
-          const profileData: any = isUserInitiator 
-            ? conn['profiles!user_connections_connected_user_id_fkey']
-            : conn['profiles!user_connections_user_id_fkey'];
-          
-          return profileData as Profile;
-        }).filter(Boolean);
-        
-        setConnections(connectedProfiles);
+      const allCons = [ ...(consA || []), ...(consB || []) ];
+      const otherUserIds = Array.from(new Set(allCons.map(c => c.user_id === userId ? c.connected_user_id : c.user_id)));
+
+      if (otherUserIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, first_name, last_name, email, city, profile_picture_url')
+          .in('id', otherUserIds);
+        setConnections((profilesData as any) || []);
+      } else {
+        setConnections([]);
       }
     } catch (error) {
       console.error("Error loading profile:", error);

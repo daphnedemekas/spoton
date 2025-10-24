@@ -1,4 +1,0 @@
-project_id = "eecdnlsbhcmllcjycpfa"
-
-[functions.discover-events]
-verify_jwt = true

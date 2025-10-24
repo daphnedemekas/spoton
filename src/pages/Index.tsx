@@ -75,7 +75,6 @@ export default function Index() {
           redirectTo: `${window.location.origin}/`,
         },
       });
-
       if (error) throw error;
     } catch (error: any) {
       toast.error(error.message);

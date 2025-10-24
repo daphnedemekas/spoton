@@ -106,7 +106,7 @@ const Saved = () => {
     try {
       if (newStatus === 'not_attended') {
         // Remove from saved
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('event_attendance')
           .delete()
           .eq('id', attendanceId);

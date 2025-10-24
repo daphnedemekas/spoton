@@ -48,6 +48,9 @@ export default function Discover() {
     "Curating events just for you...",
   ]);
   const [currentMessageIndex, setCurrentMessageIndex] = useState(0);
+  const [isAutoDiscovering, setIsAutoDiscovering] = useState(false);
+  const lastAutoDiscoverAtRef = useRef<number>(0);
+  const initialDiscoveryTriggeredRef = useRef<boolean>(false);
   
   const currentIndexRef = useRef(currentIndex);
 
@@ -115,6 +118,7 @@ export default function Discover() {
 
       if (profile) {
         setUserCity(profile.city);
+        console.log('Profile city:', profile.city);
       }
 
       // Get user's event interactions to filter them out
@@ -124,23 +128,57 @@ export default function Discover() {
         .eq("user_id", user.id);
 
       const interactedEventIds = new Set(attendanceData?.map(a => a.event_id) || []);
+      console.log('Interacted event IDs:', interactedEventIds.size);
 
       const { data: eventsData } = await supabase
         .from("events")
         .select("*");
 
+      console.log('DB events count:', eventsData?.length, eventsData?.slice(0,2));
       if (eventsData) {
         // Filter out events the user has already interacted with
-        const uninteractedEvents = eventsData.filter(event => !interactedEventIds.has(event.id));
-        // Filter by location - only show events in user's city or online events
-        const locationFiltered = uninteractedEvents.filter(event => {
-          const eventLocation = event.location.toLowerCase();
-          const userCityLower = profile?.city.toLowerCase() || '';
-          return eventLocation.includes(userCityLower) || eventLocation === 'online';
+        const uninteractedEvents = eventsData
+          .filter(event => !interactedEventIds.has(event.id))
+          .filter(event => !(event.event_link || '').includes('example.com'));
+        console.log('Uninteracted events:', uninteractedEvents.length);
+        const userCityLower = profile?.city?.toLowerCase() || '';
+        // Prefer city/online, but if none match, show all
+        const preferred = uninteractedEvents.filter(event => {
+          const eventLocation = (event.location || '').toLowerCase();
+          return userCityLower && (eventLocation.includes(userCityLower) || eventLocation === 'online');
         });
-        // Shuffle events for random order
-        const shuffled = [...locationFiltered].sort(() => Math.random() - 0.5);
+        console.log('Preferred (city/online) events:', preferred.length);
+        const pool = preferred.length > 0 ? preferred : uninteractedEvents;
+        const shuffled = [...pool].sort(() => Math.random() - 0.5);
         setAllEvents(shuffled);
+
+        // If no events exist yet, trigger a fast discovery once and reload
+        if (uninteractedEvents.length === 0 && !initialDiscoveryTriggeredRef.current) {
+          initialDiscoveryTriggeredRef.current = true;
+          console.log('No uninteracted events; triggering initial fast discovery...');
+          
+          // Fetch user interests and vibes
+          const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
+          const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
+          const interests = (userInterests || []).map((i: any) => i.interest);
+          const vibes = (userVibes || []).map((v: any) => v.vibe);
+          console.log('User interests:', interests, 'vibes:', vibes);
+          
+          try {
+            setLoading(true);
+            const { data } = await supabase.functions.invoke('discover-events', { body: { city: profile?.city || userCity, interests, vibes, limit: 15, sitesLimit: 6, resultsPerQuery: 4, interestsLimit: 2, skipRanking: false, timeoutMs: 30000 } });
+            console.log('Initial discovery response:', data);
+            // Reload after discovery
+            const { data: after } = await supabase.from("events").select("*");
+            console.log('Events after discovery:', after?.length);
+            const updated = (after || []).filter(event => !interactedEventIds.has(event.id)).filter(event => !(event.event_link || '').includes('example.com'));
+            setAllEvents(updated.sort(() => Math.random() - 0.5));
+          } catch (e) {
+            console.error('Initial discovery failed:', e);
+          } finally {
+            setLoading(false);
+          }
+        }
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -158,9 +196,7 @@ export default function Discover() {
   const handleSaveEvent = async (event: Event) => {
     try {
       // First delete any existing record to ensure clean state
-      await supabase.from("event_attendance").delete()
-        .eq("user_id", currentUserId)
-        .eq("event_id", event.id);
+      await (supabase as any).from("event_attendance").delete().eq("user_id", currentUserId).eq("event_id", event.id);
 
       // Then insert fresh 'saved' record
       const { error } = await supabase.from("event_attendance").insert({
@@ -191,9 +227,7 @@ export default function Discover() {
   const handleRemoveEvent = async (event: Event) => {
     try {
       // Delete any existing record first to ensure clean state
-      await supabase.from("event_attendance").delete()
-        .eq("user_id", currentUserId)
-        .eq("event_id", event.id);
+      await (supabase as any).from("event_attendance").delete().eq("user_id", currentUserId).eq("event_id", event.id);
 
       // Insert a "dismissed" record so it doesn't show again
       const { error } = await supabase.from("event_attendance").insert({
@@ -253,6 +287,10 @@ export default function Discover() {
         return eventDate >= today && eventDate <= weekFromNow;
       }
     });
+    if (filtered.length === 0 && allEvents.length > 0) {
+      console.log('Filtered events: 0 — using fallback to all events');
+      return allEvents;
+    }
     console.log('Filtered events:', filtered.length);
     return filtered;
   }, [allEvents, timeFilter]);
@@ -269,32 +307,40 @@ export default function Discover() {
     }
   }, [filteredEvents]);
 
-  // Auto-discover more events when running low
+  // Auto-discover more events when running low (cooldown + single-flight)
   useEffect(() => {
     const autoDiscover = async () => {
-      // Trigger discovery when we're down to 5 or fewer events
-      if (filteredEvents.length <= 5 && !loading) {
-        console.log('Running low on events, auto-discovering more...');
+      const now = Date.now();
+      const cooldownMs = 15000; // 15 seconds for faster batched fetching
+      const canRun = filteredEvents.length <= 5 && !isAutoDiscovering && (now - lastAutoDiscoverAtRef.current > cooldownMs);
+      if (!canRun) return;
+
+      console.log('Running low on events, auto-discovering more...');
+      setIsAutoDiscovering(true);
+      try {
         setLoading(true);
+        const { data } = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [], limit: 15, sitesLimit: 5, resultsPerQuery: 3, interestsLimit: 2, timeoutMs: 15000 } });
+        console.log('Auto-discovery complete:', data);
+        await loadData();
+        // Immediate follow-up batch for more depth (ranked, larger search)
         try {
-          const { data, error } = await supabase.functions.invoke('discover-events', {
-            body: {}
-          });
-          
-          if (error) throw error;
-          
-          console.log('Auto-discovery complete:', data);
+          const followUp = await supabase.functions.invoke('discover-events', { body: { city: userCity, interests: [], vibes: [], limit: 25, sitesLimit: 8, resultsPerQuery: 4, interestsLimit: 3, timeoutMs: 25000 } });
+          console.log('Follow-up discovery complete:', followUp.data);
           await loadData();
-        } catch (error: any) {
-          console.error('Auto-discovery failed:', error);
-        } finally {
-          setLoading(false);
+        } catch (e) {
+          console.warn('Follow-up discovery failed:', e);
         }
+      } catch (error: any) {
+        console.error('Auto-discovery failed:', error);
+      } finally {
+        lastAutoDiscoverAtRef.current = Date.now();
+        setIsAutoDiscovering(false);
+        setLoading(false);
       }
     };
 
     autoDiscover();
-  }, [filteredEvents.length, loading]);
+  }, [filteredEvents.length, isAutoDiscovering, userCity]);
 
   // Load more events as user swipes
   useEffect(() => {
@@ -413,7 +459,7 @@ export default function Discover() {
                   setScrapedSites([]);
                   try {
                     const { data, error } = await supabase.functions.invoke('discover-events', {
-                      body: {} // Auth is handled via JWT in Authorization header
+                      body: { city: userCity, interests: [], vibes: [], limit: 8, sitesLimit: 4, resultsPerQuery: 3, interestsLimit: 1, timeoutMs: 15000 }
                     });
                     
                     if (error) throw error;
@@ -434,6 +480,16 @@ export default function Discover() {
                     });
                     
                     await loadData();
+                    // Immediate follow-up batch (ranked, broader)
+                    try {
+                      const followUp = await supabase.functions.invoke('discover-events', {
+                        body: { city: userCity, interests: [], vibes: [], limit: 40, sitesLimit: 20, resultsPerQuery: 8, interestsLimit: 3, skipRanking: false, timeoutMs: 20000 }
+                      });
+                      console.log('Follow-up discovery complete:', followUp.data);
+                      await loadData();
+                    } catch (e) {
+                      console.warn('Follow-up discovery failed:', e);
+                    }
                   } catch (error: any) {
                     toast({
                       variant: "destructive",
