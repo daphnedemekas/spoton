@@ -57,7 +57,7 @@ function normalizeLocation(loc: string, city: string): string {
 }
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   // Load env so server middleware can access OPENAI_API_KEY, etc.
   const env = loadEnv(mode, process.cwd(), "");
   for (const [k, v] of Object.entries(env)) {
@@ -1223,7 +1223,16 @@ Quality requirements:
                   return hasValidLink && hasValidDate;
                 });
 
-                logToFile('[DISCOVERY] Final events to return', { count: events.length, events, llmTime: Date.now() - llmStart, totalTime: Date.now() - startTime });
+                // Filter by user-selected interests if provided
+                const selectedInterestSet = new Set((interests || []).map((i: string) => (i || '').toLowerCase()));
+                const filteredByInterest = selectedInterestSet.size === 0
+                  ? events
+                  : events.filter((ev: any) => {
+                      const evInterests = (ev.interests || []).map((x: string) => (x || '').toLowerCase());
+                      return evInterests.some((x: string) => selectedInterestSet.has(x));
+                    });
+
+                logToFile('[DISCOVERY] Final events to return', { count: filteredByInterest.length, events: filteredByInterest, llmTime: Date.now() - llmStart, totalTime: Date.now() - startTime });
                 lastDiscoveryProgress.step = 'done';
 
                 // Persist new rotation offset
@@ -1237,7 +1246,7 @@ Quality requirements:
                 
                 // Save events to persistent database
                 try {
-                  for (const event of events) {
+                  for (const event of filteredByInterest) {
                     db.prepare(`INSERT OR IGNORE INTO events 
                       (id, title, description, date, time, location, event_link, image_url, interests, vibes)
                       VALUES (@id, @title, @description, @date, @time, @location, @event_link, @image_url, @interests, @vibes)
@@ -1262,11 +1271,11 @@ Quality requirements:
                 // Cache the results for 10 minutes
                 discoveryCache.set(cacheKey, {
                   expiresAt: Date.now() + 10 * 60 * 1000, // 10 minutes
-                  events: events
+                  events: filteredByInterest
                 });
                 
                 res.setHeader("Content-Type", "application/json");
-                res.end(JSON.stringify({ events, scrapingStatus }));
+                res.end(JSON.stringify({ events: filteredByInterest, scrapingStatus }));
                 return;
               } catch (e) {
                 logToFile('[DISCOVERY] FATAL ERROR', { error: e.message, stack: e.stack });
@@ -1286,6 +1295,11 @@ Quality requirements:
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
+    globals: true,
   },
   };
 });

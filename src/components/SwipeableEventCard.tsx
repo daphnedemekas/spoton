@@ -26,6 +26,50 @@ interface SwipeableEventCardProps {
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
   ({ event }, ref) => {
     const [otherUsers, setOtherUsers] = useState<Array<{ profile_picture_url: string | null; first_name: string | null }>>([]);
+    
+    function canonicalizeCity(name: string): string {
+      const n = name.trim().toLowerCase();
+      const map: Record<string, string> = {
+        'sf': 'San Francisco',
+        's.f.': 'San Francisco',
+        'san fran': 'San Francisco',
+        'san francisco': 'San Francisco',
+        'oakland': 'Oakland',
+        'berkeley': 'Berkeley',
+        'pacifica': 'Pacifica',
+        'sausalito': 'Sausalito',
+        'san mateo': 'San Mateo',
+        'san jose': 'San Jose',
+        'alameda': 'Alameda',
+        'daly city': 'Daly City',
+        'mill valley': 'Mill Valley',
+        'richmond': 'Richmond',
+        'emeryville': 'Emeryville',
+        'mountain view': 'Mountain View',
+        'palo alto': 'Palo Alto',
+        'redwood city': 'Redwood City',
+        'menlo park': 'Menlo Park',
+        'sunnyvale': 'Sunnyvale',
+        'online': 'Online',
+      };
+      return map[n] || name.trim();
+    }
+
+    function resolveDisplayLocation(title: string, location: string): string {
+      const loc = (location || '').trim();
+      if (!title) return loc || '';
+      const matches = [...title.matchAll(/\(([^)]+)\)/g)];
+      const last = matches.length > 0 ? matches[matches.length - 1][1] : '';
+      const candidate = canonicalizeCity(last);
+      if (!candidate) return loc;
+      const normalizedLoc = canonicalizeCity(loc);
+      if (!normalizedLoc) return candidate;
+      if (normalizedLoc.toLowerCase() === candidate.toLowerCase()) return normalizedLoc;
+      if (normalizedLoc.toLowerCase() === 'san francisco' && candidate) return candidate;
+      return normalizedLoc || candidate;
+    }
+
+    const displayLocation = resolveDisplayLocation(event.title, event.location);
 
     useEffect(() => {
       const fetchConnectedUsers = async () => {
@@ -119,7 +163,7 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 )}
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <MapPin className="h-4 w-4" />
-                  <span className="text-sm">{event.location}</span>
+                  <span className="text-sm">{displayLocation}</span>
                 </div>
               </div>
 

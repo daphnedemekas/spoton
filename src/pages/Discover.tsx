@@ -187,6 +187,12 @@ export default function Discover() {
         console.log('Preferred (city/online) events:', preferred.length);
         const pool = preferred.length > 0 ? preferred : uninteractedEvents;
         
+        // Filter out events that do not match any of the user's selected interests
+        const filteredByInterest = interests.length > 0
+          ? pool.filter(ev => (ev.interests || []).some((i: string) => interestSet.has((i || '').toLowerCase())))
+          : pool;
+        console.log('Interest-matched events:', filteredByInterest.length, 'of', pool.length);
+        
         // Rank by user preferences while preserving variety
         const { data: userInterests } = await supabase.from("user_interests").select("interest").eq("user_id", user.id);
         const { data: userVibes } = await supabase.from("user_vibes").select("vibe").eq("user_id", user.id);
@@ -209,7 +215,7 @@ export default function Discover() {
         }
 
         // Sort by preference score, then date
-        const ranked = [...pool].sort((a, b) => {
+        const ranked = [...filteredByInterest].sort((a, b) => {
           const sa = preferenceScore(a);
           const sb = preferenceScore(b);
           if (sb !== sa) return sb - sa;
