@@ -140,11 +140,6 @@ export const INTEREST_CATEGORIES: InterestCategory[] = [
 
 export const VIBE_CATEGORIES: VibeCategory[] = [
   {
-    name: "Energy Level",
-    icon: Zap,
-    items: ["High-Energy", "Chill", "Intimate"],
-  },
-  {
     name: "Social Style",
     icon: Users,
     items: [

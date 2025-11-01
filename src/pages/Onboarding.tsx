@@ -4,11 +4,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import { AuthGuard } from "@/components/AuthGuard";
 import { useToast } from "@/hooks/use-toast";
 import { Plus } from "lucide-react";
 import { INTEREST_CATEGORIES, VIBE_CATEGORIES, getAllInterests, getAllVibes } from "@/lib/categories";
+import { cn } from "@/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -35,6 +35,33 @@ export default function Onboarding() {
   const [selectedVibes, setSelectedVibes] = useState<string[]>([]);
   const [customVibe, setCustomVibe] = useState("");
   const [emailFrequency, setEmailFrequency] = useState("weekly");
+
+  const renderSelectableButton = (
+    value: string,
+    selected: boolean,
+    onToggle: (value: string) => void,
+    color: "primary" | "secondary" = "primary"
+  ) => {
+    const selectedClasses = color === "secondary"
+      ? "bg-secondary text-secondary-foreground border-secondary"
+      : "bg-primary text-primary-foreground border-primary";
+    const ringClasses = color === "secondary" ? "focus-visible:ring-secondary" : "focus-visible:ring-primary";
+
+    return (
+      <button
+        type="button"
+        onClick={() => onToggle(value)}
+        className={cn(
+          "rounded-full border px-4 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2",
+          ringClasses,
+          selected ? selectedClasses : "bg-background text-foreground hover:bg-muted"
+        )}
+        aria-pressed={selected}
+      >
+        {value}
+      </button>
+    );
+  };
 
   const toggleInterest = (interest: string) => {
     setSelectedInterests((prev) =>
@@ -150,7 +177,7 @@ export default function Onboarding() {
 
   return (
     <AuthGuard>
-      <div className="min-h-screen bg-gradient-subtle px-4 py-12">
+      <main id="main-content" className="min-h-screen bg-gradient-subtle px-4 py-12" aria-label="Onboarding">
         <div className="mx-auto max-w-4xl">
           <div className="mb-8 text-center">
             <h1 className="mb-2 text-4xl font-bold bg-gradient-primary bg-clip-text text-transparent">
@@ -202,10 +229,13 @@ export default function Onboarding() {
             </div>
 
             {/* Interests */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>What are your interests? ({selectedInterests.length} selected)</Label>
-              </div>
+            <fieldset className="space-y-4" aria-describedby="onboarding-interests-help">
+              <legend className="flex items-center justify-between text-base font-semibold">
+                What are your interests? ({selectedInterests.length} selected)
+              </legend>
+              <p id="onboarding-interests-help" className="text-sm text-muted-foreground">
+                Select all interests that apply. Press Enter or Space to toggle an option.
+              </p>
               
               <Accordion type="multiple" className="w-full">
                 {INTEREST_CATEGORIES.map((category) => {
@@ -214,21 +244,20 @@ export default function Onboarding() {
                     <AccordionItem key={category.name} value={category.name}>
                       <AccordionTrigger className="hover:no-underline">
                         <div className="flex items-center gap-2">
-                          <Icon className="h-5 w-5 text-primary" />
+                          <Icon className="h-5 w-5 text-primary" aria-hidden="true" />
                           <span className="font-semibold">{category.name}</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
                         <div className="flex flex-wrap gap-2 pt-2">
                           {category.items.map((interest) => (
-                            <Badge
-                              key={interest}
-                              variant={selectedInterests.includes(interest) ? "default" : "outline"}
-                              className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
-                              onClick={() => toggleInterest(interest)}
-                            >
-                              {interest}
-                            </Badge>
+                            <div key={interest}>
+                              {renderSelectableButton(
+                                interest,
+                                selectedInterests.includes(interest),
+                                toggleInterest
+                              )}
+                            </div>
                           ))}
                         </div>
                       </AccordionContent>
@@ -237,38 +266,59 @@ export default function Onboarding() {
                 })}
               </Accordion>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2" role="group" aria-label="Add custom interest">
                 <Input
                   placeholder="Add custom interest"
+                  aria-label="Add custom interest"
                   value={customInterest}
                   onChange={(e) => setCustomInterest(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addCustomInterest())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomInterest();
+                    }
+                  }}
                 />
-                <Button type="button" onClick={addCustomInterest} variant="outline" size="icon">
-                  <Plus className="h-4 w-4" />
+                <Button
+                  type="button"
+                  onClick={addCustomInterest}
+                  variant="outline"
+                  size="icon"
+                  aria-label="Add custom interest"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
               {selectedInterests.filter(i => !allPresetInterests.includes(i)).length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2" role="list" aria-label="Custom interests">
                   {selectedInterests.filter(i => !allPresetInterests.includes(i)).map((interest) => (
-                    <Badge
+                    <button
                       key={interest}
-                      variant="default"
-                      className="cursor-pointer"
+                      type="button"
+                      className="rounded-full bg-secondary px-4 py-2 text-sm text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                       onClick={() => toggleInterest(interest)}
+                      aria-pressed={true}
+                      role="listitem"
+                      aria-label={`Remove custom interest ${interest}`}
                     >
                       {interest} ✕
-                    </Badge>
+                    </button>
                   ))}
                 </div>
               )}
-            </div>
+              <div role="status" aria-live="polite" className="sr-only">
+                {selectedInterests.length} interests selected.
+              </div>
+            </fieldset>
 
             {/* Vibes */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label>What's your vibe? ({selectedVibes.length} selected)</Label>
-              </div>
+            <fieldset className="space-y-4" aria-describedby="onboarding-vibes-help">
+              <legend className="flex items-center justify-between text-base font-semibold">
+                What's your vibe? ({selectedVibes.length} selected)
+              </legend>
+              <p id="onboarding-vibes-help" className="text-sm text-muted-foreground">
+                Select all vibes that describe you. Press Enter or Space to toggle an option.
+              </p>
               
               <Accordion type="multiple" className="w-full">
                 {VIBE_CATEGORIES.map((category) => {
@@ -277,21 +327,21 @@ export default function Onboarding() {
                     <AccordionItem key={category.name} value={category.name}>
                       <AccordionTrigger className="hover:no-underline">
                         <div className="flex items-center gap-2">
-                          <Icon className="h-5 w-5 text-accent" />
+                          <Icon className="h-5 w-5 text-secondary" aria-hidden="true" />
                           <span className="font-semibold">{category.name}</span>
                         </div>
                       </AccordionTrigger>
                       <AccordionContent>
                         <div className="flex flex-wrap gap-2 pt-2">
                           {category.items.map((vibe) => (
-                            <Badge
-                              key={vibe}
-                              variant={selectedVibes.includes(vibe) ? "default" : "outline"}
-                              className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
-                              onClick={() => toggleVibe(vibe)}
-                            >
-                              {vibe}
-                            </Badge>
+                            <div key={vibe}>
+                              {renderSelectableButton(
+                                vibe,
+                                selectedVibes.includes(vibe),
+                                toggleVibe,
+                                "secondary"
+                              )}
+                            </div>
                           ))}
                         </div>
                       </AccordionContent>
@@ -300,60 +350,91 @@ export default function Onboarding() {
                 })}
               </Accordion>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2" role="group" aria-label="Add custom vibe">
                 <Input
                   placeholder="Add custom vibe"
+                  aria-label="Add custom vibe"
                   value={customVibe}
                   onChange={(e) => setCustomVibe(e.target.value)}
-                  onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addCustomVibe())}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addCustomVibe();
+                    }
+                  }}
                 />
-                <Button type="button" onClick={addCustomVibe} variant="outline" size="icon">
-                  <Plus className="h-4 w-4" />
+                <Button
+                  type="button"
+                  onClick={addCustomVibe}
+                  variant="outline"
+                  size="icon"
+                  aria-label="Add custom vibe"
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
                 </Button>
               </div>
               {selectedVibes.filter(v => !allPresetVibes.includes(v)).length > 0 && (
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2" role="list" aria-label="Custom vibes">
                   {selectedVibes.filter(v => !allPresetVibes.includes(v)).map((vibe) => (
-                    <Badge
+                    <button
                       key={vibe}
-                      variant="default"
-                      className="cursor-pointer"
+                      type="button"
+                      className="rounded-full bg-secondary px-4 py-2 text-sm text-secondary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
                       onClick={() => toggleVibe(vibe)}
+                      aria-pressed={true}
+                      role="listitem"
+                      aria-label={`Remove custom vibe ${vibe}`}
                     >
                       {vibe} ✕
-                    </Badge>
+                    </button>
                   ))}
                 </div>
               )}
-            </div>
+              <div role="status" aria-live="polite" className="sr-only">
+                {selectedVibes.length} vibes selected.
+              </div>
+            </fieldset>
 
             {/* Email Frequency */}
-            <div className="space-y-4">
-              <Label>How often would you like email updates?</Label>
-              <div className="flex flex-wrap gap-2">
-                {EMAIL_FREQUENCIES.map((freq) => (
-                  <Badge
-                    key={freq.value}
-                    variant={emailFrequency === freq.value ? "default" : "outline"}
-                    className="cursor-pointer px-4 py-2 text-sm transition-all hover:scale-105"
-                    onClick={() => setEmailFrequency(freq.value)}
-                  >
-                    {freq.label}
-                  </Badge>
-                ))}
+            <fieldset className="space-y-4">
+              <legend className="text-base font-semibold">How often would you like email updates?</legend>
+              <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Email frequency">
+                {EMAIL_FREQUENCIES.map((freq) => {
+                  const selected = emailFrequency === freq.value;
+                  return (
+                    <label
+                      key={freq.value}
+                      className={cn(
+                        "cursor-pointer rounded-full border px-4 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                        selected ? "bg-primary text-primary-foreground border-primary" : "bg-background text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name="email-frequency"
+                        value={freq.value}
+                        checked={selected}
+                        onChange={() => setEmailFrequency(freq.value)}
+                        className="sr-only"
+                      />
+                      {freq.label}
+                    </label>
+                  );
+                })}
               </div>
-            </div>
+            </fieldset>
 
             <Button
               type="submit"
               disabled={loading}
               className="h-12 w-full bg-gradient-primary text-primary-foreground shadow-glow transition-all hover:scale-[1.02]"
+              aria-busy={loading}
             >
               {loading ? "Creating profile..." : "Continue"}
             </Button>
           </form>
         </div>
-      </div>
+      </main>
     </AuthGuard>
   );
 }

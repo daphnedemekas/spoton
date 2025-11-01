@@ -10,6 +10,7 @@ import { AuthGuard } from "@/components/AuthGuard";
 import { ArrowLeft, MapPin, Calendar, Sparkles, Heart, CheckCircle, Settings, Users, UserPlus, UserCheck, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import logoIcon from "@/assets/logo-icon.png";
+import type { Event } from "@/types/event";
 
 type Profile = {
   id: string;
@@ -27,16 +28,6 @@ type Connection = {
   email: string;
   city: string;
   profile_picture_url: string | null;
-};
-
-type Event = {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  location: string;
-  vibes: string[];
-  interests: string[];
 };
 
 type AttendanceWithEvent = {

@@ -19,7 +19,7 @@
     user_connections: any[];
   };
 
-  const STORAGE_KEY = 'demo_db_v7'; // Fixed: removed overly aggressive signature filtering blocking all events
+  const STORAGE_KEY = 'demo_db_v9'; // Bump to reset local demo data (profiles/interests/saved) - v9: canonical_key support
   const SESSION_KEY = 'demo_session_v1';
 
   const randomId = () => crypto.randomUUID();
