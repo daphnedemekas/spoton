@@ -6,17 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, MapPin, ExternalLink, ArrowLeft, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { Event as BaseEvent } from "@/types/event";
 
-interface Event {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  time?: string;
-  location: string;
+interface Event extends BaseEvent {
   event_link: string | null;
-  interests: string[];
-  vibes: string[];
 }
 
 const Attended = () => {

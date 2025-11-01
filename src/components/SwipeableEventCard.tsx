@@ -1,75 +1,87 @@
-import { forwardRef, useEffect, useState } from "react";
+import { forwardRef, useEffect, useState, useRef } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, MapPin, ExternalLink, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-
-type Event = {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  time?: string;
-  location: string;
-  vibes: string[];
-  interests: string[];
-  image_url?: string;
-  event_link?: string;
-};
+import type { Event } from "@/types/event";
+import { resolveDisplayLocation } from "@/lib/locationUtils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface SwipeableEventCardProps {
   event: Event;
+  onSave?: (event: Event) => void;
+  onDismiss?: (event: Event) => void;
+  onViewDetails?: (event: Event) => void;
+  isActive?: boolean;
+  instructionsId?: string;
 }
 
 export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardProps>(
-  ({ event }, ref) => {
+  ({ event, onSave, onDismiss, onViewDetails, isActive = false, instructionsId }, ref) => {
     const [otherUsers, setOtherUsers] = useState<Array<{ profile_picture_url: string | null; first_name: string | null }>>([]);
-    
-    function canonicalizeCity(name: string): string {
-      const n = name.trim().toLowerCase();
-      const map: Record<string, string> = {
-        'sf': 'San Francisco',
-        's.f.': 'San Francisco',
-        'san fran': 'San Francisco',
-        'san francisco': 'San Francisco',
-        'oakland': 'Oakland',
-        'berkeley': 'Berkeley',
-        'pacifica': 'Pacifica',
-        'sausalito': 'Sausalito',
-        'san mateo': 'San Mateo',
-        'san jose': 'San Jose',
-        'alameda': 'Alameda',
-        'daly city': 'Daly City',
-        'mill valley': 'Mill Valley',
-        'richmond': 'Richmond',
-        'emeryville': 'Emeryville',
-        'mountain view': 'Mountain View',
-        'palo alto': 'Palo Alto',
-        'redwood city': 'Redwood City',
-        'menlo park': 'Menlo Park',
-        'sunnyvale': 'Sunnyvale',
-        'online': 'Online',
-      };
-      return map[n] || name.trim();
-    }
-
-    function resolveDisplayLocation(title: string, location: string): string {
-      const loc = (location || '').trim();
-      if (!title) return loc || '';
-      const matches = [...title.matchAll(/\(([^)]+)\)/g)];
-      const last = matches.length > 0 ? matches[matches.length - 1][1] : '';
-      const candidate = canonicalizeCity(last);
-      if (!candidate) return loc;
-      const normalizedLoc = canonicalizeCity(loc);
-      if (!normalizedLoc) return candidate;
-      if (normalizedLoc.toLowerCase() === candidate.toLowerCase()) return normalizedLoc;
-      if (normalizedLoc.toLowerCase() === 'san francisco' && candidate) return candidate;
-      return normalizedLoc || candidate;
-    }
+    const imageRef = useRef<HTMLImageElement | null>(null);
+    const [shouldLoadImage, setShouldLoadImage] = useState(false);
 
     const displayLocation = resolveDisplayLocation(event.title, event.location);
+    const titleId = `event-${event.id}-title`;
+    const descriptionId = `event-${event.id}-description`;
+
+    const describedBy = instructionsId ? `${descriptionId} ${instructionsId}` : descriptionId;
+
+    useEffect(() => {
+      if (!event.image_url) {
+        setShouldLoadImage(false);
+        return;
+      }
+      setShouldLoadImage(false);
+
+      const node = imageRef.current;
+      if (!node) {
+        setShouldLoadImage(true);
+        return;
+      }
+
+      if (typeof IntersectionObserver === "undefined") {
+        setShouldLoadImage(true);
+        return;
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            setShouldLoadImage(true);
+            observer.disconnect();
+          }
+        });
+      }, { rootMargin: "120px" });
+
+      observer.observe(node);
+      return () => observer.disconnect();
+    }, [event.id, event.image_url]);
+
+    useEffect(() => {
+      if (isActive && event.image_url) {
+        setShouldLoadImage(true);
+      }
+    }, [isActive, event.image_url]);
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!isActive) return;
+      if ((e.key === "ArrowRight" || e.key === "d" || e.key === "D") && onSave) {
+        e.preventDefault();
+        onSave(event);
+      }
+      if ((e.key === "ArrowLeft" || e.key === "a" || e.key === "A") && onDismiss) {
+        e.preventDefault();
+        onDismiss(event);
+      }
+      if ((e.key === "Enter" || e.key === " ") && onViewDetails) {
+        e.preventDefault();
+        onViewDetails(event);
+      }
+    };
 
     useEffect(() => {
       const fetchConnectedUsers = async () => {
@@ -125,16 +137,38 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
       }
     };
 
+    const handleEventLinkClick = (e: React.MouseEvent<HTMLButtonElement>) => handleEventLink(e);
+    const handleEventLinkPointer = (e: React.PointerEvent<HTMLButtonElement>) => handleEventLink(e);
+
     return (
       <div ref={ref} className="absolute inset-0">
-        <Card className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-xl">
+        <Card
+          role="article"
+          aria-roledescription="Event card"
+          aria-labelledby={titleId}
+          aria-describedby={describedBy}
+          tabIndex={isActive ? 0 : -1}
+          onKeyDown={handleKeyDown}
+          onDoubleClick={() => {
+            if (isActive && onViewDetails) {
+              onViewDetails(event);
+            }
+          }}
+          className="h-full w-full overflow-hidden border-2 border-border/50 bg-card shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70"
+        >
           <div className="h-full flex flex-col">
             {event.image_url && (
               <div className="relative h-28 w-full overflow-hidden bg-muted flex-shrink-0">
+                {!shouldLoadImage && <Skeleton className="absolute inset-0" />}
                 <img
-                  src={event.image_url}
+                  ref={imageRef}
+                  src={shouldLoadImage ? event.image_url ?? undefined : undefined}
+                  data-src={event.image_url}
                   alt={event.title}
-                  className="h-full w-full object-cover"
+                  className="h-full w-full object-cover transition-opacity duration-300"
+                  style={{ opacity: shouldLoadImage ? 1 : 0 }}
+                  loading="lazy"
+                  decoding="async"
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
@@ -144,40 +178,52 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
             
             <div className="flex-1 overflow-y-auto p-5 pb-20">
               <div className="mb-3">
-                <h2 className="mb-2 text-xl font-bold leading-tight">{event.title}</h2>
-                <p className="text-sm text-muted-foreground leading-relaxed">
+                <h2 id={titleId} className="mb-2 text-xl font-bold leading-tight">
+                  {event.title}
+                </h2>
+                <p id={descriptionId} className="text-sm text-muted-foreground leading-relaxed">
                   {event.description}
                 </p>
               </div>
 
               <div className="mb-3 space-y-1.5 text-sm">
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
+                  <Calendar className="h-4 w-4" aria-hidden="true" />
                   <span className="text-sm">{new Date(event.date).toLocaleDateString()}</span>
                 </div>
                 {event.time && (
                   <div className="flex items-center gap-2 text-muted-foreground">
-                    <Clock className="h-4 w-4" />
+                    <Clock className="h-4 w-4" aria-hidden="true" />
                     <span className="text-sm">{event.time}</span>
                   </div>
                 )}
                 <div className="flex items-center gap-2 text-muted-foreground">
-                  <MapPin className="h-4 w-4" />
+                  <MapPin className="h-4 w-4" aria-hidden="true" />
                   <span className="text-sm">{displayLocation}</span>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5" role="list" aria-label="Event vibes">
                   {event.vibes.slice(0, 3).map((v) => (
-                    <Badge key={v} variant="secondary" className="text-xs py-0.5 px-2">
+                    <Badge
+                      key={v}
+                      variant="secondary"
+                      className="text-xs py-0.5 px-2"
+                      role="listitem"
+                    >
                       {v}
                     </Badge>
                   ))}
                 </div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap gap-1.5" role="list" aria-label="Event interests">
                   {event.interests.slice(0, 3).map((i) => (
-                    <Badge key={i} variant="outline" className="text-xs py-0.5 px-2">
+                    <Badge
+                      key={i}
+                      variant="outline"
+                      className="text-xs py-0.5 px-2"
+                      role="listitem"
+                    >
                       {i}
                     </Badge>
                   ))}
@@ -187,9 +233,17 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
             
             {/* Other users who saved this event */}
             {otherUsers.length > 0 && (
-              <div className="absolute bottom-16 right-4 flex -space-x-2">
+              <div
+                className="absolute bottom-16 right-4 flex -space-x-2"
+                aria-label={`${otherUsers.length} of your connections saved this event`}
+              >
                 {otherUsers.map((user, i) => (
-                  <Avatar key={i} className="h-8 w-8 border-2 border-card">
+                  <Avatar
+                    key={i}
+                    className="h-8 w-8 border-2 border-card"
+                    title={user.first_name || undefined}
+                    aria-label={user.first_name ? `${user.first_name} saved this event` : "Friend saved this event"}
+                  >
                     <AvatarImage src={user.profile_picture_url || undefined} />
                     <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                       {user.first_name?.[0] || '?'}
@@ -205,10 +259,12 @@ export const SwipeableEventCard = forwardRef<HTMLDivElement, SwipeableEventCardP
                 <Button
                   variant="outline"
                   size="sm"
-                  onPointerDown={handleEventLink}
+                  onPointerDown={handleEventLinkPointer}
+                  onClick={handleEventLinkClick}
                   className="w-full gap-2"
+                  aria-label={`Open event link for ${event.title} in a new tab`}
                 >
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4" aria-hidden="true" />
                   Event Link
                 </Button>
               </div>

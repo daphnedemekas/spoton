@@ -11,17 +11,11 @@ import { useToast } from "@/hooks/use-toast";
 import { isPast, parseISO, format, isSameDay } from "date-fns";
 import logoIcon from "@/assets/logo-icon.png";
 import { cn } from "@/lib/utils";
+import type { Event as BaseEvent } from "@/types/event";
+import { eventAttendanceService } from "@/services/eventAttendanceService";
 
-interface Event {
-  id: string;
-  title: string;
-  description: string;
-  date: string;
-  time?: string;
-  location: string;
+interface Event extends BaseEvent {
   event_link: string | null;
-  interests: string[];
-  vibes: string[];
   attendance?: {
     id: string;
     status: string;
@@ -48,6 +42,13 @@ const Saved = () => {
         .eq('status', 'saved');
 
       if (attendanceError) throw attendanceError;
+      
+      console.log('[Saved] Raw saved data:', savedData);
+      
+      // Double-check status filter (demo client may not honor .eq for status)
+      const trulySaved = (savedData || []).filter((a: any) => a.status === 'saved');
+      console.log('[Saved] After status filter:', trulySaved);
+      
       // Get dismissed records and exclude them from saved
       const { data: dismissedData } = await supabase
         .from('event_attendance')
@@ -56,7 +57,9 @@ const Saved = () => {
         .eq('status', 'dismissed');
 
       const dismissedIds = new Set((dismissedData || []).map(d => d.event_id));
-      const filteredSaved = (savedData || []).filter(a => !dismissedIds.has(a.event_id));
+      const filteredSaved = trulySaved.filter(a => !dismissedIds.has(a.event_id));
+      
+      console.log('[Saved] After dismissal filter:', filteredSaved);
 
       const eventIds = filteredSaved.map(a => a.event_id) || [];
       
@@ -73,20 +76,24 @@ const Saved = () => {
 
       if (eventsError) throw eventsError;
 
-      const eventsWithAttendance = eventsData?.map(event => ({
-        ...event,
-        attendance: filteredSaved.find(a => a.event_id === event.id)
-      })) || [];
+      // Ensure we only keep events that are actually saved
+      const savedIdSet = new Set(eventIds);
+      const eventsWithAttendance = (eventsData || [])
+        .filter(event => savedIdSet.has(event.id))
+        .map(event => ({
+          ...event,
+          attendance: filteredSaved.find(a => a.event_id === event.id)
+        }));
 
       // Also exclude saved events whose canonical key matches a dismissed event's canonical key
       if (dismissedIds.size > 0) {
-        const dismissedIdsArray = Array.from(dismissedIds);
-        const { data: dismissedEvents } = await supabase
+        // Fetch all events and filter locally (demo client doesn't support .in for events)
+        const { data: allEvents } = await supabase
           .from('events')
-          .select('*')
-          .in('id', dismissedIdsArray);
+          .select('*');
+        const dismissedEvents = (allEvents || []).filter((e: any) => dismissedIds.has(e.id));
         const dismissedCanonical = new Set(
-          (dismissedEvents || []).map((e: any) => `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`)
+          dismissedEvents.map((e: any) => `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`)
         );
         const filteredByCanonical = eventsWithAttendance.filter((e: any) => {
           const key = `${(e.title||'').toLowerCase()}|${(e.date||'').slice(0,10)}|${(e.location||'').toLowerCase()}`;
@@ -135,20 +142,10 @@ const Saved = () => {
     try {
       if (newStatus === 'not_attended') {
         // Remove from saved
-        const { error } = await (supabase as any)
-          .from('event_attendance')
-          .delete()
-          .eq('id', attendanceId);
-
-        if (error) throw error;
+        await eventAttendanceService.removeSavedEvent(attendanceId);
       } else {
         // Update to attended
-        const { error } = await supabase
-          .from('event_attendance')
-          .update({ status: newStatus })
-          .eq('id', attendanceId);
-
-        if (error) throw error;
+        await eventAttendanceService.markAttended(attendanceId);
       }
 
       toast({
@@ -169,18 +166,13 @@ const Saved = () => {
 
   const handleRemoveEvent = async (eventId: string, attendanceId: string) => {
     try {
-      const { error } = await supabase
-        .from('event_attendance')
-        .delete()
-        .eq('id', attendanceId);
-
-      if (error) throw error;
+      // Remove the saved event
+      await eventAttendanceService.removeSavedEvent(attendanceId);
 
       // Also mark as dismissed to prevent reappearing by canonical dedupe
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        await (supabase as any).from('event_attendance').delete().eq('user_id', user.id).eq('event_id', eventId);
-        await supabase.from('event_attendance').insert({ user_id: user.id, event_id: eventId, status: 'dismissed' });
+        await eventAttendanceService.dismissEvent(user.id, eventId);
       }
 
       toast({
@@ -516,7 +508,7 @@ const Saved = () => {
                                       <Button
                                         size="sm"
                                         variant="destructive"
-                                        onClick={() => handleRemoveEvent(event.attendance!.id)}
+                                        onClick={() => handleRemoveEvent(event.id, event.attendance!.id)}
                                         className="w-full"
                                       >
                                         <Trash2 className="h-4 w-4 mr-1" />

@@ -23,45 +23,54 @@ export const ScrapingStatusPanel = ({ sites, isVisible }: ScrapingStatusPanelPro
   const failedCount = sites.filter(s => s.status === "failed").length;
   const pendingCount = sites.filter(s => s.status === "pending").length;
 
+  const summary = `Scraping ${sites.length} sites. ${successCount} succeeded, ${failedCount} failed, ${pendingCount} still pending.`;
+
   return (
-    <Card className="mb-6 border-border/50 bg-card shadow-card">
+    <Card
+      className="mb-6 border-border/50 bg-card shadow-card"
+      role="region"
+      aria-label="Scraped sites status"
+      aria-live="polite"
+    >
       <CardHeader>
         <CardTitle className="flex items-center justify-between">
           <span>Scraped Sites ({sites.length})</span>
           <div className="flex gap-2">
             <Badge variant="default" className="bg-success">
-              <CheckCircle className="h-3 w-3 mr-1" />
+              <CheckCircle className="h-3 w-3 mr-1" aria-hidden="true" />
               {successCount}
             </Badge>
             <Badge variant="destructive">
-              <XCircle className="h-3 w-3 mr-1" />
+              <XCircle className="h-3 w-3 mr-1" aria-hidden="true" />
               {failedCount}
             </Badge>
             {pendingCount > 0 && (
               <Badge variant="secondary">
-                <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                <Loader2 className="h-3 w-3 mr-1 animate-spin" aria-hidden="true" />
                 {pendingCount}
               </Badge>
             )}
           </div>
         </CardTitle>
+        <p className="sr-only">{summary}</p>
       </CardHeader>
       <CardContent>
         <ScrollArea className="h-[300px] pr-4">
-          <div className="space-y-2">
+          <div className="space-y-2" role="list" aria-label="Scraped sites list">
             {sites.map((site, index) => (
               <div
                 key={index}
                 className="flex items-start gap-2 p-2 rounded-md border border-border/50 bg-background/50"
+                role="listitem"
               >
                 {site.status === "success" && (
-                  <CheckCircle className="h-4 w-4 text-success flex-shrink-0 mt-0.5" />
+                  <CheckCircle className="h-4 w-4 text-success flex-shrink-0 mt-0.5" aria-hidden="true" />
                 )}
                 {site.status === "failed" && (
-                  <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+                  <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" aria-hidden="true" />
                 )}
                 {site.status === "pending" && (
-                  <Loader2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-0.5 animate-spin" aria-hidden="true" />
                 )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
